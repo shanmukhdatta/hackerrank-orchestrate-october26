@@ -169,10 +169,12 @@ async function runtimeAudit(load) {
   const sortSteps=steps=>steps.sort((a,b)=>{const x=order.get(a.operation)||[9,9],y=order.get(b.operation)||[9,9];return x[0]-y[0]||x[1]-y[1]||a.system_id.localeCompare(b.system_id)||a.resource_id.localeCompare(b.resource_id)});
   const actionState={DELETE:["REPORT_REMAINING_RECORD","DELETE_RECORD","VERIFY_RECORD_ABSENT","PRESENT","ABSENT"],REDACT:["REPORT_EXPOSED_PII","REDACT_RECORD","VERIFY_RECORD_REDACTED","PRESENT","REDACTED"],ANONYMIZE:["REPORT_EXPOSED_PII","ANONYMIZE_RECORD","VERIFY_RECORD_ANONYMIZED","PRESENT","ANONYMIZED"],RETAIN:["","","VERIFY_RECORD_PRESENT","PRESENT","PRESENT"],FLOW:["REPORT_ACTIVE_DATA_FLOW","DISABLE_DATA_FLOW","VERIFY_DATA_FLOW_DISABLED","ACTIVE","DISABLED"],BACKUP:["REPORT_RESTORE_RISK","BLOCK_RESTORE","VERIFY_RESTORE_BLOCKED","ACTIVE","BLOCKED"]};
   const intent=(s)=>{
+    // Intention is determined from the request text, not the reported status.
+    // Inflection-aware and multilingual: the public data includes six languages.
     s=norm(s).normalize("NFKC");
-    const neg=/\b(do not|don't|not requesting|without deleting|no deletion|not delete|keep my account|cancel my deletion request)\b/i.test(s);
-    const yes=/\b(delete|deletion|erase|erasure|remove my (?:account|data|profile)|permanently removed|close my account|account closure|forget my data|forget me|desaparecer|supprim|effac|elimin|borrar|apagar|excluir|exclusão|löschen|lösch|cancell|rimuov|удал|削除|删除|حذف|हटाना|मिटा)\b/i.test(s);
-    return yes&&!neg;
+    const negate=/\b(do not delete|don't delete|not requesting deletion|not a deletion request|keep my account|cancel my deletion request|no deletion requested)\b/i.test(s);
+    const request=/\b(delet\w*|eras\w*|remov\w*|clos\w*|cancell\w*|forget\s+me|account\s+closure|permanent\w*\s+remov\w*|desaparecer|supprim\w*|effac\w*|elimin\w*|borrar|apagar|excluir|exclusão|löschen|lösch\w*|rimuov\w*)\b|удал|削除|消去|删除|삭제|حذف|हटाना|मिटा/i.test(s);
+    return request&&!negate;
   };
   function planCase(c){
     if(!intent(c.request_text))return {case_id:c.case_id,deletion_status:"NOT_APPLICABLE",steps_json:"[]"};
