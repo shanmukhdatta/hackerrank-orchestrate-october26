@@ -172,11 +172,37 @@ async function runtimeAudit(load) {
       else if(/resource_id=/.test(line))parseLog(line,eid,time);
     }
   };
-  const evidenceFiles=manifest.filter(f=>/\.(log|json|sql|txt)$/i.test(f.file_path));
+  const parseMedia=(s,eid,time)=>{
+    // OCR is supplementary evidence, never a claim that extraction was perfect.
+    const ids=[...s.matchAll(/\b(?:account|search|support|analytics|export|backup|data_flow|marketing|audit_record|cache|tombstone|email_delivery)_[0-9]+\b/gi)];
+    const visited=new Set();
+    for(const match of ids){
+      const rid=match[0].toLowerCase();
+      if(visited.has(rid))continue;
+      visited.add(rid);
+      const context=s.slice(Math.max(0,match.index-240),Math.min(s.length,match.index+520));
+      let refs=tokens(context);
+      if(!refs.length && visited.size===1)refs=tokens(s.slice(0,850));
+      // In multi-row admin screenshots, nearby identity takes precedence.
+      let subject=refs.find(x=>x.includes("@")) || refs.find(x=>x.startsWith("user_"));
+      if(!subject)continue;
+      const rec={resource_id:rid,subject_reference:subject,
+        result:/\b(not found|no results|missing|absent)\b/i.test(context)?"NOT_FOUND":"FOUND"};
+      if(/^support_/.test(rid)&&/attachment|support reference|uploaded|pdf/i.test(s))rec.record_type="SUPPORT_ATTACHMENT";
+      if(/^marketing_/.test(rid))rec.record_type="MARKETING_PROFILE";
+      if(/^data_flow_/.test(rid)){rec.record_type="DATA_FLOW";rec.result=/\bdisabled\b/i.test(context)?"DISABLED":"ACTIVE"}
+      if(/^backup_/.test(rid)){rec.record_type="BACKUP_ARCHIVE";rec.result=/\bblocked\b/i.test(context)?"BLOCKED":"ACTIVE"}
+      if(/^audit_record_/.test(rid)){rec.record_type="SECURITY_AUDIT_LOG";rec.result="PRESENT"}
+      add(rid,rec,eid,time,serviceOf(rid));
+    }
+  };
+  const evidenceFiles=manifest.filter(f=>/\.(log|json|sql|txt|png|pdf)$/i.test(f.file_path))
+    .map(f=>/\.(png|pdf)$/i.test(f.file_path)?
+      {...f,media_source:true,file_path:"evidence/parsed_media/"+f.file_id+".txt"}:f);
   for(let i=0;i<evidenceFiles.length;i+=12){
     const batch=evidenceFiles.slice(i,i+12);
     const loaded=await Promise.all(batch.map(async f=>{try{return [f,await load("dataset/"+f.file_path)]}catch(e){skipped.push(f.file_id);return [f,""]}}));
-    for(const [f,s] of loaded){if(!s)continue;sourceCount++;if(/\.log$/i.test(f.file_path))parseLog(s,f.file_id,f.captured_at);else if(/\.json$/i.test(f.file_path))parseJSON(s,f.file_id,f.captured_at);else if(/\.sql$/i.test(f.file_path))parseSQL(s,f.file_id,f.captured_at);else parseTxt(s,f.file_id,f.captured_at)}
+    for(const [f,s] of loaded){if(!s)continue;sourceCount++;if(/\.log$/i.test(f.file_path))parseLog(s,f.file_id,f.captured_at);else if(/\.json$/i.test(f.file_path))parseJSON(s,f.file_id,f.captured_at);else if(/\.sql$/i.test(f.file_path))parseSQL(s,f.file_id,f.captured_at);else if(f.media_source)parseMedia(s,f.file_id,f.captured_at);else parseTxt(s,f.file_id,f.captured_at)}
   }
   // Infer historical ownership of anonymized/readback resources by earlier observations.
   const owners=new Map();
