@@ -195,8 +195,8 @@ async function runtimeAudit(load) {
     // Inflection-aware and multilingual: the public data includes six languages.
     s=norm(s).normalize("NFKC");
     const negate=/\b(do not delete|don't delete|not requesting deletion|not a deletion request|keep my account|cancel my deletion request|no deletion requested)\b/i.test(s);
-    const request=/\b(delet\w*|eras\w*|remov\w*|clos\w*|cancell\w*|forget\s+me|account\s+closure|permanent\w*\s+remov\w*|desaparecer|supprim\w*|effac\w*|elimin\w*|borrar|apagar|excluir|exclusão|löschen|lösch\w*|rimuov\w*)\b|удал|削除|消去|删除|삭제|حذف|हटाना|मिटा/i.test(s);
-    return (request||/profile\\s+(?:is\\s+)?gone|records?\\s+cannot\\s+identify\\s+me/i.test(s))&&!negate;
+    const request=/\b(delet\w*|eras\w*|remov\w*|clos\w*|cancell\w*|forget\s+me|account\s+closure|permanent\w*\s+remov\w*|desaparecer|suppres\w*|supprim\w*|effac\w*|elimin\w*|borrar|apagar|excluir|exclusão|löschen|lösch\w*|rimuov\w*)\b|удал|削除|消去|删除|삭제|حذف|हटाना|मिटा/i.test(s);
+    return (request||/profile\s+(?:is\s+)?gone|records?\s+cannot\s+identify\s+me/i.test(s))&&!negate;
   };
   function planCase(c){
     if(!intent(c.request_text))return {case_id:c.case_id,deletion_status:"NOT_APPLICABLE",steps_json:"[]"};
