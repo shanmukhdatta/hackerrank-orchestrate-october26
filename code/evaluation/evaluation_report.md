@@ -9,16 +9,16 @@ not prediction input. No hidden labels were used.
 | Metric | Numerator / denominator | Score |
 |---|---:|---:|
 | Case-level deletion-status accuracy | 27/32 | 84.38% |
-| Exact complete-row accuracy | 8/32 | 25.00% |
-| Ordered operation-sequence accuracy | 9/32 | 28.12% |
-| Positional field-level accuracy | 710/1164 | 61.00% |
-| Full step precision | 125/154 | 81.17% |
-| Full step recall | 125/193 | 64.77% |
-| Full step F1 | - | 72.05% |
+| Exact complete-row accuracy | 7/32 | 21.88% |
+| Ordered operation-sequence accuracy | 8/32 | 25.00% |
+| Positional field-level accuracy | 707/1182 | 59.81% |
+| Full step precision | 128/160 | 80.00% |
+| Full step recall | 128/193 | 66.32% |
+| Full step F1 | - | 72.52% |
 
-Full run: **518 cases**; parsed 79 machine-readable
-evidence files; 2723 observations; matched ownership for
-1667 resources.
+Full run: **518 cases**; parsed 94 machine-readable
+evidence files; 2745 observations; matched ownership for
+1674 resources.
 Predicted status counts: {"COMPLETE": 156, "INCOMPLETE": 357, "NOT_APPLICABLE": 5}.
 Full-output contract validation issues: **0**.
 
@@ -31,7 +31,7 @@ truth for any hidden customer.
 
 ## Failures found against the public samples
 
-- case_01: expected COMPLETE (1 steps); predicted INCOMPLETE (0 steps)\n- case_02: expected COMPLETE (1 steps); predicted INCOMPLETE (0 steps)\n- case_03: expected COMPLETE (3 steps); predicted COMPLETE (2 steps)\n- case_04: expected COMPLETE (2 steps); predicted INCOMPLETE (0 steps)\n- case_06: expected INCOMPLETE (4 steps); predicted INCOMPLETE (3 steps)\n- case_07: expected INCOMPLETE (4 steps); predicted INCOMPLETE (0 steps)\n- case_08: expected INCOMPLETE (4 steps); predicted INCOMPLETE (3 steps)\n- case_09: expected INCOMPLETE (5 steps); predicted INCOMPLETE (3 steps)\n- case_10: expected INCOMPLETE (4 steps); predicted COMPLETE (1 steps)\n- case_17: expected INCOMPLETE (5 steps); predicted INCOMPLETE (6 steps)\n- case_18: expected INCOMPLETE (14 steps); predicted INCOMPLETE (12 steps)\n- case_20: expected INCOMPLETE (8 steps); predicted INCOMPLETE (6 steps)\n- case_21: expected COMPLETE (3 steps); predicted COMPLETE (1 steps)\n- case_22: expected INCOMPLETE (8 steps); predicted INCOMPLETE (7 steps)\n- case_23: expected INCOMPLETE (8 steps); predicted INCOMPLETE (7 steps)\n- case_24: expected INCOMPLETE (7 steps); predicted INCOMPLETE (7 steps)\n- case_25: expected COMPLETE (3 steps); predicted COMPLETE (1 steps)\n- case_26: expected COMPLETE (6 steps); predicted COMPLETE (5 steps)\n- case_27: expected COMPLETE (6 steps); predicted COMPLETE (5 steps)\n- case_28: expected COMPLETE (6 steps); predicted COMPLETE (4 steps)\n- case_29: expected INCOMPLETE (14 steps); predicted INCOMPLETE (11 steps)\n- case_30: expected INCOMPLETE (14 steps); predicted INCOMPLETE (11 steps)\n- case_31: expected COMPLETE (3 steps); predicted COMPLETE (2 steps)\n- case_32: expected INCOMPLETE (5 steps); predicted COMPLETE (2 steps)
+- case_01: expected COMPLETE (1 steps); predicted INCOMPLETE (0 steps)\n- case_02: expected COMPLETE (1 steps); predicted INCOMPLETE (0 steps)\n- case_03: expected COMPLETE (3 steps); predicted COMPLETE (2 steps)\n- case_04: expected COMPLETE (2 steps); predicted INCOMPLETE (0 steps)\n- case_06: expected INCOMPLETE (4 steps); predicted INCOMPLETE (3 steps)\n- case_07: expected INCOMPLETE (4 steps); predicted INCOMPLETE (3 steps)\n- case_08: expected INCOMPLETE (4 steps); predicted INCOMPLETE (3 steps)\n- case_09: expected INCOMPLETE (5 steps); predicted INCOMPLETE (3 steps)\n- case_10: expected INCOMPLETE (4 steps); predicted COMPLETE (1 steps)\n- case_15: expected INCOMPLETE (5 steps); predicted INCOMPLETE (8 steps)\n- case_17: expected INCOMPLETE (5 steps); predicted INCOMPLETE (6 steps)\n- case_18: expected INCOMPLETE (14 steps); predicted INCOMPLETE (12 steps)\n- case_20: expected INCOMPLETE (8 steps); predicted INCOMPLETE (6 steps)\n- case_21: expected COMPLETE (3 steps); predicted COMPLETE (1 steps)\n- case_22: expected INCOMPLETE (8 steps); predicted INCOMPLETE (7 steps)\n- case_23: expected INCOMPLETE (8 steps); predicted INCOMPLETE (7 steps)\n- case_24: expected INCOMPLETE (7 steps); predicted INCOMPLETE (7 steps)\n- case_25: expected COMPLETE (3 steps); predicted COMPLETE (1 steps)\n- case_26: expected COMPLETE (6 steps); predicted COMPLETE (5 steps)\n- case_27: expected COMPLETE (6 steps); predicted COMPLETE (5 steps)\n- case_28: expected COMPLETE (6 steps); predicted COMPLETE (4 steps)\n- case_29: expected INCOMPLETE (14 steps); predicted INCOMPLETE (11 steps)\n- case_30: expected INCOMPLETE (14 steps); predicted INCOMPLETE (11 steps)\n- case_31: expected COMPLETE (3 steps); predicted COMPLETE (2 steps)
 
 ## Contract-validation findings
 

@@ -11,7 +11,7 @@
 - Estimated average model API cost per request: **USD $0.00**.
 - Per-model totals: not applicable (no external models).
 - Evaluated requests: **518**.
-- Parsed machine-readable evidence files: **79**.
+- Parsed machine-readable evidence files: **94**.
 
 No paid provider or external AI model API is required for the full dataset
 audit. These zeroes describe **runtime inference**, not prior ChatGPT
