@@ -12,6 +12,44 @@ Read [`problem_statement.md`](./problem_statement.md) for the complete challenge
 
 ---
 
+## Implemented solution (this fork)
+
+This fork implements a **deterministic, evidence-first deletion audit agent**.
+It is a symbolic rule/planning system and **does not call an LLM API at
+runtime**. It examines the supplied public evidence, historical identifiers
+and policy rules, produces three-phase action plans, and verifies the
+submission structure against public samples.
+
+**Requirements:** Python 3.10+ and Node.js 18+. Optional but recommended:
+`pdftotext` from poppler-utils and `tesseract` for PDF/screenshot evidence.
+The GitHub Actions workflow installs these open-source tools automatically.
+
+From the repository root:
+
+```bash
+# Optional but recommended: interpret supplied PDFs and screenshots
+python3 code/extract_media.py
+# Required: generate final output.csv
+python3 code/main.py
+# Required: validate and generate reports from public samples
+python3 code/evaluation/main.py
+# Required: package the code as code.zip
+python3 code/package.py
+```
+
+These commands read only the participant-facing `dataset/` files. Public
+reference sample answers are accessed by the **evaluation** script, not by the
+prediction engine. Python launches the Node.js inference engine.
+
+**Implementation and interview explanation:** [code/LEARNING_GUIDE.md](code/LEARNING_GUIDE.md).
+
+**Actual measured performance and limitations:** [code/evaluation/evaluation_report.md](code/evaluation/evaluation_report.md).
+Do not confuse structural validation with complete agreement on hidden labels.
+The workflow also packages the verified deliverables and stores the latest
+`output.csv` and `code.zip` in the repository root.
+
+---
+
 ## Quick Start
 
 Clone the repository and move into the project directory:
