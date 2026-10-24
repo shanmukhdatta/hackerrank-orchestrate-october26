@@ -48,6 +48,7 @@ op_groups = [
     ["VERIFY_RECORD_ABSENT","VERIFY_RECORD_PRESENT","VERIFY_RECORD_REDACTED","VERIFY_RECORD_ANONYMIZED","VERIFY_DATA_FLOW_DISABLED","VERIFY_RESTORE_BLOCKED"],
 ]
 op_order = {op:(p,i) for p,ops in enumerate(op_groups) for i,op in enumerate(ops)}
+missing_evidence_cases=[r["case_id"] for r in rows if r["deletion_status"]=="INCOMPLETE" and not json.loads(r["steps_json"])]
 schema_errors = []
 for row in rows:
     steps = json.loads(row["steps_json"])
@@ -132,7 +133,7 @@ Full run: **{len(rows)} cases**; parsed {run['sources']} machine-readable
 evidence files; {run['observations']} observations; matched ownership for
 {run['known_resource_owners']} resources.
 Predicted status counts: {json.dumps(run['statuses'],sort_keys=True)}.
-Full-output contract validation issues: **{len(schema_errors)}**.
+Full-output contract validation issues: **{len(schema_errors)}**.\nCases with incomplete assessment but no grounded action steps: **{len(missing_evidence_cases)}** (needs further evidence, not fabricated).
 
 ## Independent constructed evaluation cases
 
@@ -163,6 +164,7 @@ truth for any hidden customer.
 - The public-sample metrics are the reproducible measurement, **not a claim
   about hidden-case accuracy**.
 """
+report=report.replace(chr(92)+"n", chr(10))
 (EVAL/"evaluation_report.md").write_text(report,encoding="utf-8")
 usage=f"""# Model usage and cost report
 
