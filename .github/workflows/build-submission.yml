@@ -7,6 +7,7 @@ on:
       - code.zip
       - log.txt
       - code/evaluation/*.md
+      - dataset/evidence/parsed_media/**
   workflow_dispatch:
 
 permissions:
@@ -41,7 +42,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add output.csv code.zip code/evaluation/evaluation_report.md code/evaluation/usage_report.md code/evaluation/media_audit.md
+          git add output.csv code.zip code/evaluation/evaluation_report.md code/evaluation/usage_report.md code/evaluation/media_audit.md dataset/evidence/parsed_media/
           if ! git diff --cached --quiet; then
             git commit -m "Generate audited predictions and submission artifacts"
             git push origin HEAD:main
