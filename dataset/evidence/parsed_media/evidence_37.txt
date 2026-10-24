@@ -1,0 +1,32 @@
+} Northstar Shop Sentinel © Search events, users, IP addresses or references... Cs}
+Northstar Shop / Sentinel / Account events
+Cy) overiw Account events [6 signed events J Fiter | Export | Actions
+Oo Threats Subject filter: user_03 - 18-26 Aug 2026 UTC
+Events (6) Timeline itegrity
+OC) Account events
+O Audit ogs earn Categories Integrity fires Partition
+6 5 ° 2026-Q3
+( Detections aoe aoe aoe aoe
+(J investigations Events (6) Updated moments ago « 6 records audit_record_003 - Raw event
+(Reports Time (UTC) Event Category Subject Actor Integrity Reference ommn Peccotine’ rinstratrecerded
+(1) 28 Aug 04:08 ‘Account closure recorded ‘Account lifecycle user_03 ‘Automated workflow Valid ‘audit_record_003 subject en
+(©) 25 Aug 03:21 Session revoked Session management user_03 Security system Valid audit_record_002 actor ‘automated account workflow
+recorded.at —-2026-08-25T04:03:002
+© 24 Aug 16:14 Recovery challenge completed ‘Authentication user_03. User (self) Valid audit_record_001
+fingerprint sfoc..31ad
+(@) 22 Aug 11:27 Email change confirmed Profile update user_03 User (self) Valid audit_record_006
+signature Valid
+(5) 20 Aug 09:42 Login from new devica ‘Authentication user_03 User (self) Valid ‘audit_record_005 journal 2026-03
+18 Aug 14:05 Password changed ‘Authentication user_03. User (self) Valid ‘audit_record_004 -
+activity
+25 Aug
+SECC
+25 Aug
+cote!
+24 Aug
+See ce
+22009
+ee omer
+exit
+SEAS
+build 2026.10.4
