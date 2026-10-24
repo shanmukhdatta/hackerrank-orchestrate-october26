@@ -94,24 +94,46 @@ async function runtimeAudit(load) {
   const parseLog=(s,eid,time)=>{
     const traces=new Map();
     for(const line of s.split(/\r?\n/)){
-      const iso=line.match(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ/);const when=iso?iso[0]:time;
-      let r=parseKV(line);if(r.message){r={...r,...parseKV(r.message)}}
-      if(r.trace_id&&r.event&&/(started|requested|lookup_started|query_started|scan_started)$/.test(r.event))traces.set(r.trace_id,{...r});
+      const iso=line.match(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ/);
+      const when=iso?iso[0]:time;
+      let r=parseKV(line);
+      if(r.message)r={...r,...parseKV(r.message)};
+      if(r.trace_id&&r.event&&/(started|requested|lookup_started|query_started|scan_started)$/.test(r.event))
+        traces.set(r.trace_id,{...r});
       if(r.trace_id&&traces.has(r.trace_id))r={...traces.get(r.trace_id),...r};
-      const rid=r.resource_id; if(!rid)continue;
-      if(/(_started|_retried|_retry|connection_acquired|_scheduled)$/.test(r.event||""))continue;
-      if(r.event==="profile_lookup_completed"||r.event==="index_query_completed"||r.event==="audit_record_read_completed"||r.event==="support_ticket_read_completed"||r.event==="restore_policy_read_completed"||r.event==="connector_config_read_completed"||r.event==="message_pii_scan"||r.event==="record_lookup"||r.record_type||r.result){
-        if(r.event==="index_query_completed")r.result=norm(r.result)==="hit"?"FOUND":r.result;
-        if(r.event==="message_pii_scan"){r.result="IDENTIFIABLE";r.subject_reference=r.matched_value||r.subject_reference}
-        if(r.event==="support_ticket_read_completed")r.record_type="SUPPORT_MESSAGE";
-        if(r.event==="profile_lookup_completed")r.record_type="USER_PROFILE";
-        if(r.event==="restore_policy_read_completed")r.record_type="BACKUP_ARCHIVE";
-        if(r.event==="connector_config_read_completed")r.record_type="DATA_FLOW";
-        if(r.event==="audit_record_read_completed")r.record_type="SECURITY_AUDIT_LOG";
+      const rid=r.resource_id;
+      if(!rid)continue;
+      const event=String(r.event||"");
+      if(/(_started|_retried|_retry|connection_acquired|_scheduled)$/.test(event))continue;
+      if(event==="index_query_completed"){
+        r.record_type="SEARCH_INDEX_ENTRY";
+        if(/^(hit|hits)$/i.test(r.result||""))r.result="FOUND";
+        else if(/^(miss|no_hits|empty)$/i.test(r.result||""))r.result="NOT_FOUND";
+      }
+      if(event==="message_pii_scan"){r.result="IDENTIFIABLE";r.subject_reference=r.matched_value||r.subject_reference}
+      if(event==="support_ticket_read_completed")r.record_type="SUPPORT_MESSAGE";
+      if(event==="profile_lookup_completed")r.record_type="USER_PROFILE";
+      if(event==="contact_lookup_completed")r.record_type="MARKETING_PROFILE";
+      if(event==="restore_policy_read_completed")r.record_type="BACKUP_ARCHIVE";
+      if(event==="connector_config_read_completed")r.record_type="DATA_FLOW";
+      if(event==="audit_record_read_completed")r.record_type="SECURITY_AUDIT_LOG";
+      if(event==="connector_heartbeat"){
+        r.record_type="DATA_FLOW";
+        r.result=tri(r.enabled)?"ACTIVE":"DISABLED";
+      }
+      if(event==="restore_candidate_evaluated"){
+        r.record_type="BACKUP_ARCHIVE";
+        r.result=(tri(r.eligible)&&!tri(r.deletion_block))?"ACTIVE":"BLOCKED";
+      }
+      if(event==="contact_lookup_completed"&&Number(r.rows)===0)r.result="NOT_FOUND";
+      if(event==="contact_lookup_completed"&&Number(r.rows)>0)r.result="FOUND";
+      const isReadback=/(lookup_completed|query_completed|read_completed|scan|heartbeat|restore_candidate_evaluated|record_lookup|record_snapshot|state_read|record_presence)/.test(event);
+      if(isReadback||r.record_type||r.result){
         add(rid,r,eid,when,r.system||r.service);
       }
     }
   };
+
   function sqlValues(s){const out=[];let cell="",q=false;for(let i=0;i<s.length;i++){const c=s[i];if(c==="'"){if(q&&s[i+1]==="'"){cell+="'";i++}else q=!q}else if(c===","&&!q){out.push(cell.trim()==="NULL"?null:cell.trim());cell=""}else cell+=c}out.push(cell.trim()==="NULL"?null:cell.trim());return out}
   const parseSQL=(s,eid,time)=>{
     const cols=new Map();for(const m of s.matchAll(/CREATE TABLE\s+"?(\w+)"?\s*\(([\s\S]*?)\);/gi)){let names=[];for(const col of m[2].matchAll(/(?:^|,)\s*"?(\w+)"?\s+(?:TEXT|INTEGER|REAL|BLOB)/gim))names.push(col[1]);cols.set(m[1],names)}
@@ -174,7 +196,7 @@ async function runtimeAudit(load) {
     s=norm(s).normalize("NFKC");
     const negate=/\b(do not delete|don't delete|not requesting deletion|not a deletion request|keep my account|cancel my deletion request|no deletion requested)\b/i.test(s);
     const request=/\b(delet\w*|eras\w*|remov\w*|clos\w*|cancell\w*|forget\s+me|account\s+closure|permanent\w*\s+remov\w*|desaparecer|supprim\w*|effac\w*|elimin\w*|borrar|apagar|excluir|exclusão|löschen|lösch\w*|rimuov\w*)\b|удал|削除|消去|删除|삭제|حذف|हटाना|मिटा/i.test(s);
-    return request&&!negate;
+    return (request||/profile\\s+(?:is\\s+)?gone|records?\\s+cannot\\s+identify\\s+me/i.test(s))&&!negate;
   };
   function planCase(c){
     if(!intent(c.request_text))return {case_id:c.case_id,deletion_status:"NOT_APPLICABLE",steps_json:"[]"};
