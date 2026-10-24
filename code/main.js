@@ -226,7 +226,13 @@ async function main() {
   const root = path.resolve(__dirname, "..");
   const read = async file => fs.readFileSync(path.join(root, file), "utf8");
   const result = await runtimeAudit(read);
+  const escapeCsv = value => '"' + String(value).replace(/"/g, '""') + '"';
+  const sampleCsv = "case_id,deletion_status,steps_json\n" +
+    result.samplePred.map(r => [r.case_id, r.deletion_status, escapeCsv(r.steps_json)].join(",")).join("\n") + "\n";
+  fs.mkdirSync(path.join(root, "code", "evaluation"), {recursive: true});
   fs.writeFileSync(path.join(root, "output.csv"), result.csv, "utf8");
+  fs.writeFileSync(path.join(root, "code", "evaluation", "sample_predictions.csv"), sampleCsv, "utf8");
+  fs.writeFileSync(path.join(root, "code", "evaluation", "run_stats.json"), JSON.stringify(result.stats, null, 2) + "\n", "utf8");
   console.log(JSON.stringify(result.stats, null, 2));
   return result;
 }
