@@ -80,3 +80,47 @@ branch=main
 repo_root=/home/runner/work/hackerrank-orchestrate-october26/hackerrank-orchestrate-october26
 worktree=GitHub Actions checkout and GitHub connector
 parent_agent=none
+
+## [2026-10-25T05:58:37.319Z] Pre-submission completeness audit
+
+User Prompt (verbatim, secrets redacted):
+before learinng first i want to submit this to them does every code has comppelted or ont check and tell em
+
+Agent Response Summary:
+Audited the published GitHub code, generated files, reports and latest CI execution. Confirmed the 518-row output and packaging existed but flagged low exact-row accuracy and 32 incomplete assessments without grounded action plans. Explicitly advised against claiming the solution was fully complete.
+
+Actions:
+* Read problem statement, AGENTS.md, generated output.csv, evaluation and usage reports, log.txt, workflow configuration and code using GitHub connector
+* Checked 518 output rows, distinct case IDs, evidence references and published CI steps
+* Presented truthful submission readiness and file links; did not submit on HackerRank
+
+Context:
+tool=ChatGPT
+model=GPT-6
+branch=main
+repo_root=/mnt/data/ghost_check
+worktree=GitHub connector and local independent verification copy
+parent_agent=none
+
+## [2026-10-25T05:58:37.319Z] Improve model, regression tests and create final submission bundle
+
+User Prompt (verbatim, secrets redacted):
+complete all and give me fibnal zip file to submit
+
+Agent Response Summary:
+Improved deletion-intent checks, null-valued log interpretation, legacy contact index handling and account tombstone policy. Found a temporal provenance bug: evidence files captured after audit_at had wrongly influenced earlier case decisions, and fixed it using evidence_files.csv capture timestamps. Ran local evidence audit against actual participant-facing dataset: status 29/32 (90.62%), exact complete rows 7/32 (21.88%), full step F1 89.64%, 518 schema-valid outputs; 27 incomplete cases lack grounded actions. Added thirteen synthetic regression tests, packaged code.zip and a convenient submission_bundle.zip; no hidden-grade accuracy or full raw agent-trace completeness is claimed.
+
+Actions:
+* Used GitHub connector to inspect and update code/main.js, code/evaluation/tests.js, code/package.py, and .github/workflows/build-submission.yml
+* Used GitHub Actions to run tests, OCR/PDF extraction, full inference, validation, and ZIP packaging; inspected failures and corrected synthetic test fixture errors
+* Retrieved GitHub Actions dataset artifact for independent local execution of the full evidence audit and public-sample scoring
+* Downloaded workflow artifact ZIP and verified code.zip and submission_bundle.zip contents locally
+* Did not submit to the HackerRank website and did not fabricate missing historical agent-trace files
+
+Context:
+tool=ChatGPT
+model=GPT-6
+branch=main
+repo_root=/mnt/data/ghost_check
+worktree=GitHub connector and local independent verification copy
+parent_agent=none
