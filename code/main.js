@@ -253,7 +253,7 @@ async function runtimeAudit(load) {
     if(negate)return "NOT_DELETE";
     if(positive)return "DELETE";
     // Ordinary non-deletion service inquiries are not deletion authorizations.
-    if(/\b(invoice|receipt|access|login|sign.?in|password|correct|information|copy of|download|update my|order history)\b/i.test(s))
+    if(/\b(invoice|receipt|access|login|sign.?in|password|correct|change|replace|information|copy of|download|update my|order history)\b/i.test(s))
       return "NOT_DELETE";
     return "UNCERTAIN";
   };
