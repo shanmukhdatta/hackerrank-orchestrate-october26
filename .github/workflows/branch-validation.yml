@@ -27,15 +27,47 @@ jobs:
         run: python3 code/evaluation/dataset_edge_tests.py
       - name: Run agent regression tests
         run: node code/evaluation/tests.js
+      - name: Validate negative evidence and anonymous provenance
+        run: node code/evaluation/negative_evidence_tests.js
       - name: Generate 518-case audit
         run: python3 code/main.py
       - name: Evaluate public sample answers and validate output
         run: python3 code/evaluation/main.py
-      - name: Store sandbox-safe evaluation results
-        uses: actions/upload-artifact@v4
+      - name: Check output evidence and submission package
+        run: |
+          python3 code/evaluation/submission_check.py
+          python3 code/package.py
+          python3 - <<'PY'
+          import os,zipfile,hashlib
+          for name in ('output.csv','code.zip','submission_bundle.zip'):
+              with open(name,'rb') as f:
+                  data=f.read()
+              print(name, len(data),'bytes SHA256',hashlib.sha256(data).hexdigest())
+          with zipfile.ZipFile('code.zip') as z:
+              print('code.zip files:',len(z.namelist()))
+          PY
+      - name: Print reproducible quality report
         if: always()
+        run: |
+          if [ -f code/evaluation/evaluation_report.md ]; then
+            sed -n '1,60p' code/evaluation/evaluation_report.md
+          fi
+      - name: Upload submission deliverables for user review
+        uses: actions/upload-artifact@v4
+        if: success()
         with:
-          name: grounded-agent-branch-validation
+          name: ghost-data-final-submission-candidate
           path: |
+            output.csv
+            code.zip
+            submission_bundle.zip
             code/evaluation/*.md
+          if-no-files-found: error
+          retention-days: 15
+      - name: Preserve failed-run diagnostic reports
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ghost-data-diagnostics
+          path: code/evaluation/*.md
           if-no-files-found: warn
