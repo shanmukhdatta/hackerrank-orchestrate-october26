@@ -147,3 +147,43 @@ branch=main
 repo_root=/mnt/data/ghost_check
 worktree=GitHub connector and independent local verifier
 parent_agent=none
+
+
+## [2026-10-25T10:27:31.063Z] SESSION START
+
+tool=ChatGPT
+model=GPT-6
+Repo Root: /mnt/data/final_validation_work
+Branch: agent/data-grounded-hardening-20261025
+Worktree: /mnt/data/final_validation_work (local reproducibility copy)
+Parent Agent: none
+Language: js|py
+Time Remaining: not configured
+
+## [2026-10-25T10:27:31.063Z] Full end-to-end diagnostic repair and submission candidate
+
+User Prompt (verbatim, secrets redacted):
+Diagnosis fix that run check the rsluts , ready for final submission, run the entire flow workflow from start to end okay 
+
+After diagnosing and fixing all so then we will submit to the to organisation 
+
+First run entire thinda okay
+
+Agent Response Summary:
+Diagnosed three public-sample status errors caused by missing negative SQL readbacks and lost anonymized-record provenance, then implemented independently corroborated point-in-time absence evidence and bounded request-to-anonymization linking. Added strict evidence-time and operation-state validation, additional regression tests, and a read-only branch CI that generates output.csv, code.zip, and submission_bundle.zip. Extended log handling for observed RFC5424 and pipe-formatted traces, reducing main-dataset INCOMPLETE cases with no grounded steps from 18 to 2. Measured 32/32 public sample status accuracy, 14/32 exact rows, 92.05% step F1; no claim about hidden cases, no HackerRank submission, and no changes to main.
+
+Actions:
+* Inspected supplied 518 requests, historical identities, activity, evidence tables, and 32 separately held reference sample answers for evaluation only.
+* Changed code/main.js on development branch to support negative snapshots, anonymous provenance, RFC5424 and pipe trace correlation.
+* Added code/evaluation/negative_evidence_tests.js and strict code/evaluation/submission_check.py.
+* Updated branch CI to run complete extraction, tests, prediction, evaluation, validation, packaging, and download artifact upload.
+* Independently downloaded the built artifact and reproduced extraction and validation against the participant-facing dataset in the sandbox.
+* Refreshed README and data-grounded edge-case documentation to show measured limits.
+
+Context:
+tool=ChatGPT
+model=GPT-6
+branch=agent/data-grounded-hardening-20261025
+repo_root=/mnt/data/final_validation_work
+worktree=/mnt/data/final_validation_work
+parent_agent=none
