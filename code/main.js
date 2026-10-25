@@ -19,9 +19,16 @@ async function runtimeAudit(load) {
   const norm=s=>String(s??"").trim().toLowerCase();
   const tokens=s=>[...new Set((String(s??"").toLowerCase().match(/[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}|user_\d+|[a-f0-9]{64}/g)||[]))];
   const aliases=new Map(); const users=new Map();
-  for(const id of ids){users.set(id.user_id,id); const set=new Set([id.user_id]);for(const k of ["email","name","phone","email_hash"])if(id[k])set.add(norm(id[k]));aliases.set(id.user_id,set)}
+  for(const id of ids){users.set(id.user_id,id); const set=new Set([id.user_id]);for(const k of ["email","phone","email_hash"])if(id[k])set.add(norm(id[k]));aliases.set(id.user_id,set)}
   for(const c of changes)if(aliases.has(c.user_id)){for(const k of ["old_value","new_value"])if(c[k])aliases.get(c.user_id).add(norm(c[k]))}
-  const emailToUser=new Map();for(const [u,vs] of aliases)for(const v of vs)if(v.includes("@"))emailToUser.set(v,u);
+  // The graph keeps every candidate owner. Never let Map.set silently overwrite an ambiguous email.
+  const emailToUsers=new Map();
+  for(const [u,vs] of aliases)for(const v of vs)if(v.includes("@")){
+    if(!emailToUsers.has(v))emailToUsers.set(v,new Set());
+    emailToUsers.get(v).add(u);
+  }
+  const emailToUser=new Map([...emailToUsers].filter(([,owners])=>owners.size===1).map(([email,owners])=>[email,[...owners][0]]));
+  const ambiguousEmails=[...emailToUsers].filter(([,owners])=>owners.size>1).map(([email])=>email);
   const observation=[];const latestOwner=new Map(); let sourceCount=0, skipped=[];
   const serviceOf=(rid,hint="")=>{
     if(/^(account_|tombstone_)/.test(rid))return rid.startsWith("tombstone_")?"identity_service":"account_service";
@@ -90,7 +97,9 @@ async function runtimeAudit(load) {
     let sys=rec.system||rec.origin_system||rec.data_store||hint||serviceOf(rid);sys=serviceOf(rid,sys);
     const v=Object.values(rec).flatMap(x=>typeof x==="string"?tokens(x):[]);const ident=new Set(v);
     for(const k of ["subject_reference","customer_reference","user_id","lookup_key","match_key","correlation_key","subject_key","customer_email","email","requester_email","owner_email"])if(rec[k])ident.add(norm(rec[k]));
-    observation.push({rid,sys,state,time:t,evidence,category:category(rid,rec),ident:[...ident],rec});
+    observation.push({rid,sys,state,time:t,evidence,category:category(rid,rec),
+      // Preserve the physical SQL table so a deleted primary cannot hide a live replica.
+      store:rec.physical_store||sys,ident:[...ident],rec});
   };
   const parseKV=s=>{let r={};for(const m of s.matchAll(/([A-Za-z_][\w]*)=(?:"((?:\\.|[^"\\])*)"|([^\s]+))/g)){let v=m[2]===undefined?m[3]:m[2];v=v.replace(/\\"/g,'"').replace(/\\\\/g,"\\");r[m[1]]=/^(?:null|none)$/i.test(v)?null:v}return r};
   const parseLog=(s,eid,time)=>{
@@ -143,7 +152,7 @@ async function runtimeAudit(load) {
     for(const m of s.matchAll(/INSERT INTO\s+"?(\w+)"?\s+VALUES\s*\((.*?)\);/gis)){
       const values=sqlValues(m[2]),fields=cols.get(m[1])||[];let r=Object.fromEntries(values.map((v,i)=>[fields[i]||"field_"+i,v]));if(r.record_json){try{r={...r,...JSON.parse(r.record_json)}}catch{}}
       const rid=r.resource_id||values.find(v=>typeof v==="string"&&/^(?:account|search|analytics|backup|data_flow|support|export|audit_record|tombstone)_\d+$/.test(v));
-      if(rid)add(rid,{...r,collection_name:r.collection_name||m[1]},eid,r.updated_at||time,r.origin_system);
+      if(rid)add(rid,{...r,collection_name:r.collection_name||m[1],physical_store:m[1]},eid,r.updated_at||time,r.origin_system);
     }
   };
   const parseJSON=(s,eid,time)=>{
@@ -229,20 +238,55 @@ async function runtimeAudit(load) {
   };
   function planCase(c){
     if(!intent(c.request_text))return {case_id:c.case_id,deletion_status:"NOT_APPLICABLE",steps_json:"[]"};
-    const id=emailToUser.get(norm(c.email));const aliasSet=id?aliases.get(id):new Set([norm(c.email)]);
+    let id=emailToUser.get(norm(c.email));
+    // Bounded evidence fallback: a current/historical miss may be linked by an explicit
+    // customer email and user_id on the same observed resource, never by fuzzy names.
+    if(!id && !emailToUsers.has(norm(c.email))){
+      const candidates=new Set();
+      for(const o of observation)if(o.ident.includes(norm(c.email)))
+        for(const t of o.ident)if(/^user_\d+$/.test(t)&&users.has(t))candidates.add(t);
+      if(candidates.size===1)id=[...candidates][0];
+    }
+    if(!id)throw Error("Identity unresolved or ambiguous for "+c.case_id+"; do not invent an audit verdict");
+    const aliasSet=aliases.get(id);
     const mine=observation.filter(o=>{
       if(o.time&&o.time>c.audit_at)return false;
        if(captureByEvidence.get(o.evidence)&&captureByEvidence.get(o.evidence)>c.audit_at)return false;
       return (owners.get(o.rid)?.has(id))||o.ident.some(v=>aliasSet.has(v)||norm(c.email)===v);
     });
+    // Reconstruct each physical copy independently before assessing the resource.
+    const byStore=new Map();
+    for(const o of mine){
+      const k=o.rid+"|"+o.store, before=byStore.get(k);
+      if(!before||o.time>before.time||(o.time===before.time&&o.evidence<before.evidence))byStore.set(k,o);
+    }
+    const policyAction=o=>o.category==="DATA_FLOW"?"FLOW":o.category==="BACKUP_ARCHIVE"?"BACKUP":
+      o.category==="ACCOUNT_TOMBSTONE"?"REDACT":catAction.get(o.category);
+    const violates=o=>{
+      const a=policyAction(o);
+      if(!a)return false;
+      if(a==="DELETE")return o.state!=="ABSENT";
+      if(a==="REDACT")return !["REDACTED","ABSENT"].includes(o.state);
+      if(a==="ANONYMIZE")return !["ANONYMIZED","ABSENT"].includes(o.state);
+      if(a==="RETAIN")return o.state!=="PRESENT";
+      if(a==="FLOW"||a==="BACKUP")return o.state==="ACTIVE";
+      return false;
+    };
+    // Any confirmed violating copy wins over a compliant copy of the same resource.
     const byRes=new Map();
-    for(const o of mine){const k=o.rid;const before=byRes.get(k);if(!before||o.time>before.time||(o.time===before.time&&o.evidence<before.evidence))byRes.set(k,o)}
+    for(const o of byStore.values()){
+      const before=byRes.get(o.rid);
+      if(!before || Number(violates(o))>Number(violates(before)) ||
+        (violates(o)===violates(before) && o.time>before.time))byRes.set(o.rid,o);
+    }
     const steps=[], defects=[];const uniq=new Set();
     const push=(phase,sys,rid,op,state,evidence)=>{const key=phase+"|"+rid+"|"+op;if(uniq.has(key))return;uniq.add(key);steps.push({step_no:0,phase,system_id:sys,resource_id:rid,operation:op,state,evidence_id:evidence||""})};
     const todo=[];
     for(const o of byRes.values()){
       const kind=o.category;let action;
-      if(kind==="DATA_FLOW")action="FLOW";else if(kind==="BACKUP_ARCHIVE")action="BACKUP";else if(kind==="ACCOUNT_TOMBSTONE")action="REDACT";else action=catAction.get(kind)||"DELETE";
+      if(kind==="DATA_FLOW")action="FLOW";else if(kind==="BACKUP_ARCHIVE")action="BACKUP";else if(kind==="ACCOUNT_TOMBSTONE")action="REDACT";else action=catAction.get(kind);
+      // Unknown categories are not implicitly DELETE; preserve the uncertainty.
+      if(!action)throw Error("No deletion policy for "+kind+" on "+o.rid);
       if(kind==="LEGAL_HOLD_RECORD"&&String(o.rec.hold_status||"").toUpperCase()==="RELEASED")action="DELETE";
       if(kind==="SECURITY_AUDIT_LOG"&&o.rec.retention_until&&o.rec.retention_until<c.audit_at)action="DELETE";
       const spec=actionState[action];if(!spec)continue;
@@ -258,7 +302,8 @@ async function runtimeAudit(load) {
       if(action==="BACKUP"&&o.state==="BLOCKED")verify="VERIFY_RESTORE_BLOCKED";
       push("VERIFICATION",o.sys,o.rid,verify,vstate,o.evidence);
     }
-    const incomplete=defects.length>0||!byRes.size;
+    const incomplete=defects.length>0||!byRes.size||
+      [...byRes.values()].some(o=>violates(o)&&policyAction(o)==="RETAIN");
     if(incomplete){
       for(const t of todo)push("REMEDIATION",t.sys,t.rid,t.spec[1],t.spec[4],"");
       for(const s of steps)if(s.phase==="VERIFICATION")s.evidence_id="";
@@ -271,7 +316,7 @@ async function runtimeAudit(load) {
   const sampleOut=sample.map(planCase);
   const esc=x=>'"'+String(x).replace(/"/g,'""')+'"';
   const csv="case_id,deletion_status,steps_json\n"+out.map(r=>[r.case_id,r.deletion_status,esc(r.steps_json)].join(",")).join("\n")+"\n";
-  return {csv,stats:{requests:out.length,sources:sourceCount,skipped,observations:observation.length,known_resource_owners:owners.size,statuses:out.reduce((a,r)=>(a[r.deletion_status]=(a[r.deletion_status]||0)+1,a),{}),sample:{total:sampleOut.length}},samplePred:sampleOut};
+  return {csv,stats:{requests:out.length,sources:sourceCount,skipped,observations:observation.length,known_resource_owners:owners.size,ambiguous_email_aliases:ambiguousEmails.length,physical_stores:[...new Set(observation.map(o=>o.store))].length,statuses:out.reduce((a,r)=>(a[r.deletion_status]=(a[r.deletion_status]||0)+1,a),{}),sample:{total:sampleOut.length}},samplePred:sampleOut};
 }
 async function main() {
   const root = path.resolve(__dirname, "..");
