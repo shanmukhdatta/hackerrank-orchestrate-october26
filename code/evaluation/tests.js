@@ -5,7 +5,7 @@ const { runtimeAudit } = require("../main.js");
 const HEAD = "case_id,email,requested_at,reported_status,reported_at,audit_at,request_text\n";
 const EVIDENCE_HEADER="file_id,file_path,origin,captured_at\n";
 const IDS_HEAD="user_id,name,email,phone,email_hash,updated_at\n";
-const RULES="rule_id,data_category,condition,required_action\nrule_01,USER_PROFILE,Always,DELETE\nrule_02,SEARCH_INDEX_ENTRY,Always,DELETE\nrule_03,SECURITY_AUDIT_LOG,Within retention,RETAIN\n";
+const RULES="rule_id,data_category,condition,required_action\nrule_01,USER_PROFILE,Always,DELETE\nrule_02,SEARCH_INDEX_ENTRY,Always,DELETE\nrule_03,SECURITY_AUDIT_LOG,Within retention,RETAIN\nrule_04,ANALYTICS_PROFILE,Identifiable,ANONYMIZE\n";
 async function scenario(label,email,requestText,records,expectedStatus,expectedOps,logEvidence=null) {
   const fixtures = {
     "dataset/deletion_requests.csv":HEAD+"case_999,"+email+",2026-09-01T10:00:00Z,COMPLETE,2026-09-01T11:00:00Z,2026-09-02T10:00:00Z,"+requestText+"\n",
