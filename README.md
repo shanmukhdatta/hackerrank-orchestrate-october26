@@ -193,3 +193,25 @@ Before submitting, confirm that:
 - `code.zip` includes your runnable code, `README.md`, `code/evaluation/evaluation_report.md`, and `code/evaluation/usage_report.md`;
 - `log.txt` follows the `AGENTS.md` turn format and is uploaded to the `chat_transcript` slot; and
 - no API keys, credentials, real personal data, or sensitive configuration values are included.
+
+
+## Submission readiness (independent check, 25 October 2026)
+
+The latest measured 32-case public sample evaluation reports **29/32 (90.62%) status
+accuracy**, **7/32 (21.88%) exact-row accuracy**, and **89.64% full step F1**.
+The full dataset produces 518 structurally valid rows. These are public
+sample metrics only, not hidden-grader accuracy. There are **27 INCOMPLETE
+cases with no evidence-grounded steps**, so this should not be represented
+as a fully correct solution.
+
+`submission_bundle.zip` is a convenience archive containing separately
+uploadable `code.zip`, `output.csv`, `log.txt`, the repository trace
+instructions, and a short upload guide. **Do not upload this outer ZIP as
+`code.zip`**. The `log.txt` file documents recorded conversations but
+does not replace any additional original agent session traces that the
+organizer requests in `agent-trace.zip`. Missing historical raw traces
+cannot be reconstructed legitimately; export them from the tools you used.
+
+All code changes, observed errors, tests and measured limits should be
+explained truthfully at interview. No submission to HackerRank was executed
+by this repository workflow.
