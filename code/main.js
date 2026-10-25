@@ -40,6 +40,9 @@ async function runtimeAudit(load) {
     return candidate&&candidate.size===1?[...candidate][0]:null;
   };
   const observation=[];const latestOwner=new Map(); let sourceCount=0, skipped=[];
+  // Inventory the complete set of rows of each physical SQL table, including empty tables.
+  // Presence and explicit scoped absence must both be supported by real, timestamped evidence.
+  const sqlTableInventory=[];
   const serviceOf=(rid,hint="")=>{
     if(/^(account_|tombstone_)/.test(rid))return rid.startsWith("tombstone_")?"identity_service":"account_service";
     if(/^search_/.test(rid))return "search_service";
@@ -163,14 +166,28 @@ async function runtimeAudit(load) {
 
   function sqlValues(s){const out=[];let cell="",q=false;for(let i=0;i<s.length;i++){const c=s[i];if(c==="'"){if(q&&s[i+1]==="'"){cell+="'";i++}else q=!q}else if(c===","&&!q){out.push(cell.trim()==="NULL"?null:cell.trim());cell=""}else cell+=c}out.push(cell.trim()==="NULL"?null:cell.trim());return out}
   const parseSQL=(s,eid,time)=>{
-    const cols=new Map();for(const m of s.matchAll(/CREATE TABLE\s+"?(\w+)"?\s*\(([\s\S]*?)\);/gi)){let names=[];for(const col of m[2].matchAll(/(?:^|,)\s*"?(\w+)"?\s+(?:TEXT|INTEGER|REAL|BLOB)/gim))names.push(col[1]);cols.set(m[1],names)}
-    for(const m of s.matchAll(/INSERT INTO\s+"?(\w+)"?\s+VALUES\s*\((.*?)\);/gis)){
-      const values=sqlValues(m[2]),fields=cols.get(m[1])||[];let r=Object.fromEntries(values.map((v,i)=>[fields[i]||"field_"+i,v]));if(r.record_json){try{r={...r,...JSON.parse(r.record_json)}}catch{}}
-      const rid=r.resource_id||values.find(v=>typeof v==="string"&&/^(?:account|search|analytics|backup|data_flow|support|export|audit_record|tombstone)_\d+$/.test(v));
-      if(rid)add(rid,{...r,collection_name:r.collection_name||m[1],physical_store:m[1]},eid,r.updated_at||time,r.origin_system);
+    const cols=new Map(),rows=new Map();
+    for(const m of s.matchAll(/CREATE TABLE\s+"?(\w+)"?\s*\(([\s\S]*?)\);/gi)){
+      let names=[];
+      for(const col of m[2].matchAll(/(?:^|,)\s*"?(\w+)"?\s+(?:TEXT|INTEGER|REAL|BLOB)/gim))names.push(col[1]);
+      cols.set(m[1],names); rows.set(m[1],[]);
     }
+    for(const m of s.matchAll(/INSERT INTO\s+"?(\w+)"?\s+VALUES\s*\((.*?)\);/gis)){
+      const values=sqlValues(m[2]),fields=cols.get(m[1])||[];
+      let r=Object.fromEntries(values.map((v,i)=>[fields[i]||"field_"+i,v]));
+      if(r.record_json){try{r={...r,...JSON.parse(r.record_json)}}catch{}}
+      const rid=r.resource_id||values.find(v=>typeof v==="string"&&/^(?:account|search|analytics|backup|data_flow|support|export|audit_record|tombstone)_\d+$/.test(v));
+      if(rid){
+        if(!rows.has(m[1]))rows.set(m[1],[]);
+        rows.get(m[1]).push({rid,user_id:r.user_id||null});
+        add(rid,{...r,collection_name:r.collection_name||m[1],physical_store:m[1]},eid,r.updated_at||time,r.origin_system);
+      }
+    }
+    for(const [table,items] of rows)
+      if(/^customer_profiles_(?:primary|failover_replica|read_replica|reporting_replica)$/.test(table))
+        sqlTableInventory.push({eid,time,table,items});
   };
-  const parseJSON=(s,eid,time)=>{
+    const parseJSON=(s,eid,time)=>{
     let root;try{root=JSON.parse(s)}catch{return}
     const walk=(node,ctx={},depth=0)=>{
       if(depth>16||!node||typeof node!=="object")return;
@@ -235,6 +252,70 @@ async function runtimeAudit(load) {
   const owners=new Map();
   for(const o of observation)for(const token of o.ident){let user=token.startsWith("user_")?token:uniqueOwner(token);if(user&&users.has(user)){if(!owners.has(o.rid))owners.set(o.rid,new Set());owners.get(o.rid).add(user)}}
   for(const a of activities){const rid=a.resource_id;const usersFound=new Set(tokens(a.details).map(t=>t.startsWith("user_")?t:uniqueOwner(t)).filter(Boolean));for(const user of usersFound){if(!owners.has(rid))owners.set(rid,new Set());owners.get(rid).add(user)}}
+  // An anonymized record cannot be linked by its identifiers after compliant
+  // anonymization. A tightly bounded, *unique* request-to-operation association
+  // can propose provenance, but the anonymized snapshot (not operation SUCCESS)
+  // must independently prove its present state.
+  const allRequests=[...req,...sample];
+  const nearReported=(request,event,maxMinutes=12)=>
+    Math.abs(Date.parse(request.reported_at)-Date.parse(event.event_time))<=maxMinutes*60000;
+  const eventBelongsUniquely=(request,event)=>{
+    if(!nearReported(request,event))return false;
+    return allRequests.filter(other=>nearReported(other,event)).length===1;
+  };
+  const anonOperations=activities.filter(a=>a.event_type==="ANONYMIZE_RECORD"&&a.resource_id);
+  const linkedAnonymizedObservations=request=>observation.filter(o=>{
+    if(o.state!=="ANONYMIZED"||!o.evidence||!o.rid.startsWith("analytics_"))return false;
+    if(o.time&&o.time>request.audit_at)return false;
+    const captured=captureByEvidence.get(o.evidence);
+    if(!captured||captured>request.audit_at)return false;
+    const candidates=anonOperations.filter(a=>a.resource_id===o.rid&&
+      a.event_time<=request.audit_at&&a.event_time<=captured&&eventBelongsUniquely(request,a));
+    if(candidates.length!==1)return false;
+    const claimedOwner=owners.get(o.rid);
+    return !claimedOwner||claimedOwner.size===0;
+  });
+  // Negative readback certificates require a named account resource, two
+  // simultaneously captured physical stores, consistent observed account-to-user
+  // identifiers, an exact no-row check, and a unique operation relationship.
+  // Do not generalize "not in one sampled table" to all company databases.
+  const certifiedAccountAbsence=(request,user,hasLinkedAnon)=>{
+    const uid=/^user_(\d+)$/.exec(user);if(!uid)return [];
+    const num=Number(uid[1]);if(!Number.isSafeInteger(num))return [];
+    const knownAccountIds=[...owners].filter(([rid,set])=>/^account_\d+$/.test(rid)&&set.has(user)).map(([rid])=>rid);
+    const eligibleFileIds=[...new Set(sqlTableInventory.map(t=>t.eid))];
+    const certificates=[];
+    for(const eid of eligibleFileIds){
+      const tables=sqlTableInventory.filter(t=>t.eid===eid);
+      if(!tables.some(t=>t.table.endsWith("_primary"))||
+        !tables.some(t=>t.table.includes("_replica")))continue;
+      const captured=captureByEvidence.get(eid);
+      if(!captured||captured<=request.reported_at||captured>request.audit_at)continue;
+      const rows=tables.flatMap(t=>t.items);
+      if(rows.length===0)continue;
+      const pairs=rows.filter(r=>/^account_\d+$/.test(r.rid)&&/^user_\d+$/.test(r.user_id||""));
+      if(pairs.length!==rows.length || !pairs.every(r=>
+        Number(r.rid.split("_")[1])===Number(r.user_id.split("_")[1])))continue;
+      if(pairs.some(r=>r.user_id===user))continue;
+      const paddedWidth=Math.max(3,...pairs.filter(r=>/^account_0/.test(r.rid)).map(r=>r.rid.split("_")[1].length));
+      const rid="account_"+String(num).padStart(paddedWidth,"0");
+      if(knownAccountIds.some(x=>x!==rid))continue;
+      if(rows.some(r=>r.rid===rid))continue;
+      const associatedDeletion=activities.some(a=>a.event_type==="DELETE_RECORD"&&
+        a.resource_id===rid&&a.event_time<=captured&&eventBelongsUniquely(request,a));
+      if(!associatedDeletion&&!hasLinkedAnon)continue;
+      // If an intervening restore/sync event targets this resource, the older
+      // snapshot alone is not enough to certify its state at audit time.
+      const replay=activities.some(a=>a.resource_id===rid&&a.event_time>captured&&
+        a.event_time<=request.audit_at&&/SYNC|RESTORE|IMPORT|RECREATE/i.test(a.event_type));
+      if(replay)continue;
+      certificates.push({rid,sys:"account_service",store:"certified_primary_and_replica",
+        state:"ABSENT",category:"USER_PROFILE",time:captured,evidence:eid,
+        ident:[user,norm(request.email)],rec:{resource_id:rid,record_type:"USER_PROFILE",
+          result:"NOT_FOUND",physical_store:"certified_primary_and_replica"}});
+    }
+    return certificates;
+  };
   const phaseOperations=[
     ["REPORT_REMAINING_RECORD","REPORT_EXPOSED_PII","REPORT_ACTIVE_DATA_FLOW","REPORT_RESTORE_RISK"],
     ["DISABLE_DATA_FLOW","BLOCK_RESTORE","DELETE_RECORD","REDACT_RECORD","ANONYMIZE_RECORD"],
@@ -272,14 +353,21 @@ async function runtimeAudit(load) {
     }
     if(!id)throw Error("Identity unresolved or ambiguous for "+c.case_id+"; do not invent an audit verdict");
     const aliasSet=aliases.get(id);
+    const historicalAnon=linkedAnonymizedObservations(c);
+    const linkedAnonIds=new Set(historicalAnon.map(o=>o.rid+"|"+o.evidence));
+    const certifiedAbsent=certifiedAccountAbsence(c,id,historicalAnon.length>0);
     const mine=observation.filter(o=>{
       if(o.time&&o.time>c.audit_at)return false;
        if(captureByEvidence.get(o.evidence)&&captureByEvidence.get(o.evidence)>c.audit_at)return false;
       const resourceOwners=owners.get(o.rid);
       // Never attribute a record owned by two candidates to one user by default.
       return (resourceOwners?.size===1&&resourceOwners.has(id))||
-        o.ident.some(v=>aliasSet.has(v)||norm(c.email)===v);
+        o.ident.some(v=>aliasSet.has(v)||norm(c.email)===v)||
+        linkedAnonIds.has(o.rid+"|"+o.evidence);
     });
+    // Certified negative SQL readbacks are first-class evidence, not absence
+    // inferred from a missing collector match.
+    mine.push(...certifiedAbsent);
     // Reconstruct each physical copy independently before assessing the resource.
     const byStore=new Map();
     for(const o of mine){
