@@ -133,7 +133,7 @@ Full run: **{len(rows)} cases**; parsed {run['sources']} machine-readable
 evidence files; {run['observations']} observations; matched ownership for
 {run['known_resource_owners']} resources.
 Predicted status counts: {json.dumps(run['statuses'],sort_keys=True)}.
-Full-output contract validation issues: **{len(schema_errors)}**.\nCases with incomplete assessment but no grounded action steps: **{len(missing_evidence_cases)}** (needs further evidence, not fabricated).
+Full-output contract validation issues: **{len(schema_errors)}**.\nCases with incomplete assessment but no grounded action steps: **{len(missing_evidence_cases)}** (blocking quality gap; needs independent evidence, not fabricated).
 
 ## Independent constructed evaluation cases
 
@@ -157,7 +157,7 @@ truth for any hidden customer.
 - Added direct observation precedence rather than trusting a workflow's
   reported success.
 - Added case/field/step and sequence scoring, plus independent contract tests.
-- Remaining limitations: screenshots and PDFs are not interpreted; some
+- Remaining limitations: screenshots and PDFs are only approximately interpreted\n  using OCR/text extraction and can generate false associations; some
   anonymized records cannot be linked once historical identifiers disappear;
   overlapping snapshots can give conflicting observations; intent detection
   across languages and complex account merges requires refinement.
