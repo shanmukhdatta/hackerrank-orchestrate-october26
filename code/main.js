@@ -52,6 +52,7 @@ async function runtimeAudit(load) {
     if(/^marketing_/.test(rid))return "marketing_service";
     if(/^cache_/.test(rid))return "cache_service";
     if(/^email_delivery_/.test(rid))return "email_delivery_service";
+    if(/^legal_hold_/.test(rid))return "legal_service";
     return hint||"unknown_service";
   };
   const category=(rid,rec={})=>{
@@ -68,6 +69,7 @@ async function runtimeAudit(load) {
     if(/^marketing_/.test(rid))return "MARKETING_PROFILE";
     if(/^cache_/.test(rid))return "CACHE_ENTRY";
     if(/^email_delivery_/.test(rid))return "EMAIL_DELIVERY_LOG";
+    if(/^legal_hold_/.test(rid))return "LEGAL_HOLD_RECORD";
     if(/^data_flow_/.test(rid))return "DATA_FLOW";
     return t;
   };
