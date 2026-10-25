@@ -1,0 +1,39 @@
+name: Validate agent hardening branch
+on:
+  push:
+    branches:
+      - agent/data-grounded-hardening-20261025
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Extract supplied PDF/image evidence
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr
+          python3 code/extract_media.py
+      - name: Run agent regression tests
+        run: node code/evaluation/tests.js
+      - name: Generate 518-case audit
+        run: python3 code/main.py
+      - name: Evaluate public sample answers and validate output
+        run: python3 code/evaluation/main.py
+      - name: Store sandbox-safe evaluation results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: grounded-agent-branch-validation
+          path: |
+            code/evaluation/*.md
+          if-no-files-found: warn
