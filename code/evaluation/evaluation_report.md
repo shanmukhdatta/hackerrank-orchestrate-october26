@@ -8,20 +8,20 @@ not prediction input. No hidden labels were used.
 
 | Metric | Numerator / denominator | Score |
 |---|---:|---:|
-| Case-level deletion-status accuracy | 29/32 | 90.62% |
-| Exact complete-row accuracy | 7/32 | 21.88% |
-| Ordered operation-sequence accuracy | 7/32 | 21.88% |
-| Positional field-level accuracy | 803/1182 | 67.94% |
-| Full step precision | 160/164 | 97.56% |
-| Full step recall | 160/193 | 82.90% |
-| Full step F1 | - | 89.64% |
+| Case-level deletion-status accuracy | 32/32 | 100.00% |
+| Exact complete-row accuracy | 14/32 | 43.75% |
+| Ordered operation-sequence accuracy | 14/32 | 43.75% |
+| Positional field-level accuracy | 858/1182 | 72.59% |
+| Full step precision | 168/172 | 97.67% |
+| Full step recall | 168/193 | 87.05% |
+| Full step F1 | - | 92.05% |
 
 Full run: **518 cases**; parsed 94 machine-readable
-evidence files; 2745 observations; matched ownership for
-1674 resources.
-Predicted status counts: {"COMPLETE": 151, "INCOMPLETE": 357, "NOT_APPLICABLE": 10}.
+evidence files; 2875 observations; matched ownership for
+1844 resources.
+Predicted status counts: {"COMPLETE": 157, "INCOMPLETE": 351, "NOT_APPLICABLE": 10}.
 Full-output contract validation issues: **0**.
-Cases with incomplete assessment but no grounded action steps: **27** (blocking quality gap; needs independent evidence, not fabricated).
+Cases with incomplete assessment but no grounded action steps: **2** (blocking quality gap; needs independent evidence, not fabricated).
 
 ## Independent constructed evaluation cases
 
@@ -35,15 +35,8 @@ truth for any hidden customer.
 
 ## Failures found against the public samples
 
-- case_01: expected COMPLETE (1 steps); predicted INCOMPLETE (0 steps)
-- case_02: expected COMPLETE (1 steps); predicted INCOMPLETE (0 steps)
 - case_03: expected COMPLETE (3 steps); predicted COMPLETE (2 steps)
-- case_04: expected COMPLETE (2 steps); predicted INCOMPLETE (0 steps)
-- case_06: expected INCOMPLETE (4 steps); predicted INCOMPLETE (3 steps)
-- case_07: expected INCOMPLETE (4 steps); predicted INCOMPLETE (3 steps)
-- case_08: expected INCOMPLETE (4 steps); predicted INCOMPLETE (3 steps)
 - case_09: expected INCOMPLETE (5 steps); predicted INCOMPLETE (3 steps)
-- case_10: expected INCOMPLETE (4 steps); predicted INCOMPLETE (3 steps)
 - case_15: expected INCOMPLETE (5 steps); predicted INCOMPLETE (8 steps)
 - case_17: expected INCOMPLETE (5 steps); predicted INCOMPLETE (6 steps)
 - case_18: expected INCOMPLETE (14 steps); predicted INCOMPLETE (12 steps)
@@ -59,6 +52,7 @@ truth for any hidden customer.
 - case_29: expected INCOMPLETE (14 steps); predicted INCOMPLETE (12 steps)
 - case_30: expected INCOMPLETE (14 steps); predicted INCOMPLETE (12 steps)
 - case_31: expected COMPLETE (3 steps); predicted COMPLETE (2 steps)
+- case_32: expected INCOMPLETE (5 steps); predicted INCOMPLETE (4 steps)
 
 ## Contract-validation findings
 
@@ -66,11 +60,15 @@ truth for any hidden customer.
 
 ## Improvements implemented and limitations
 
-- Added historical identifier matching, point-in-time filtering, multiple
-  evidence formats (SQL, JSON, logs, text), and explicit policy/operation order.
-- Added direct observation precedence rather than trusting a workflow's
-  reported success.
-- Added case/field/step and sequence scoring, plus independent contract tests.
+- Added historical identifier matching, point-in-time filtering, and
+  SQL/JSON/log/PDF/image evidence normalization, with explicit operation order.
+- Added per-physical-replica state reconstruction and scoped, independently
+  corroborated negative SQL readbacks; source timestamps remain mandatory.
+- Added historical provenance verification for anonymized records and trace
+  joins for RFC5424 and pipe-delimited structured service logs.
+- Added direct readback precedence over operation SUCCESS/PARTIAL claims.
+- Added case/field/step and sequence scoring, independent regression fixtures,
+  strict audit-cutoff checks, and reproducible submission packaging.
 - Remaining limitations: screenshots and PDFs are only approximately interpreted
   using OCR/text extraction and can generate false associations; some
   anonymized records cannot be linked once historical identifiers disappear;
