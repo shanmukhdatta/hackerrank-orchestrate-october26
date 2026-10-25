@@ -110,5 +110,15 @@ async function scenario(label,email,requestText,records,expectedStatus,expectedO
     /Uncertain deletion intent/
   );
   tests.push({label:"Uncertain intent rejected",status:"PASS"});
+  const pipeLog=[
+    '2026-09-02T09:00:00Z | DEBUG | account_service | tr-12345 | profile_lookup_started | lookup_key="user1@example.org"',
+    '2026-09-02T09:00:01Z | INFO | account_service | tr-12345 | profile_lookup_completed | resource_id="account_140" rows="0" http_status="404"'
+  ].join("\n");
+  tests.push(await scenario("Pipe-header trace ownership", "user1@example.org", "Please delete my account.", [], "COMPLETE", ["VERIFY_RECORD_ABSENT"],pipeLog));
+  const syslog=[
+    '2026-09-02T09:00:00Z <15>1 node-1 search_service tr-54321 - - level=DEBUG event="index_query_started" match_key="user1@example.org"',
+    '2026-09-02T09:00:02Z <14>1 node-1 search_service tr-54321 - - level=INFO event="index_query_completed" resource_id="search_140" result="hit"'
+  ].join("\n");
+  tests.push(await scenario("Syslog-header trace ownership", "user1@example.org", "Please delete my account.", [], "INCOMPLETE", ["REPORT_REMAINING_RECORD","DELETE_RECORD","VERIFY_RECORD_ABSENT"],syslog));
   console.log(JSON.stringify({pass:tests.length,tests},null,2));
 })().catch(e=>{console.error(e);process.exitCode=1});
