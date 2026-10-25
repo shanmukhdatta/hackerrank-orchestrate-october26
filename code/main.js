@@ -9,7 +9,6 @@ async function runtimeAudit(load) {
   const dictCSV=s=>{let [head,...rows]=parseCSV(s);return rows.map(row=>Object.fromEntries(head.map((key,i)=>[key,row[i]||""])))};
   const req= dictCSV(await load("dataset/deletion_requests.csv"));
   const sample= dictCSV(await load("dataset/sample_deletion_requests.csv"));
-  const sampleGold=dictCSV(await load("dataset/sample_output.csv"));
   const ids=dictCSV(await load("dataset/user_identities.csv"));
   const changes=dictCSV(await load("dataset/user_audit_log.csv"));
   const activities=dictCSV(await load("dataset/system_activity.csv"));
@@ -270,12 +269,9 @@ async function runtimeAudit(load) {
   }
   const out=req.map(planCase).sort((a,b)=>a.case_id.localeCompare(b.case_id,undefined,{numeric:true}));
   const sampleOut=sample.map(planCase);
-  const gold=new Map(sampleGold.map(x=>[x.case_id,x]));
-  let status=0,perfect=0,totalOps=0,correctOps=0;
-  for(const r of sampleOut){let g=gold.get(r.case_id);if(!g)continue;if(r.deletion_status===g.deletion_status)status++;if(r.deletion_status===g.deletion_status&&JSON.stringify(JSON.parse(r.steps_json))===JSON.stringify(JSON.parse(g.steps_json)))perfect++;let pred=JSON.parse(r.steps_json),exp=JSON.parse(g.steps_json);totalOps+=exp.length;for(let i=0;i<Math.min(pred.length,exp.length);i++)if(pred[i].operation===exp[i].operation&&pred[i].resource_id===exp[i].resource_id)correctOps++}
   const esc=x=>'"'+String(x).replace(/"/g,'""')+'"';
   const csv="case_id,deletion_status,steps_json\n"+out.map(r=>[r.case_id,r.deletion_status,esc(r.steps_json)].join(",")).join("\n")+"\n";
-  return {csv,stats:{requests:out.length,sources:sourceCount,skipped,observations:observation.length,known_resource_owners:owners.size,statuses:out.reduce((a,r)=>(a[r.deletion_status]=(a[r.deletion_status]||0)+1,a),{}),sample:{total:sampleOut.length,status_correct:status,exact_correct:perfect,ordered_operation_hits:correctOps,canonical_operation_count:totalOps}},samplePred:sampleOut};
+  return {csv,stats:{requests:out.length,sources:sourceCount,skipped,observations:observation.length,known_resource_owners:owners.size,statuses:out.reduce((a,r)=>(a[r.deletion_status]=(a[r.deletion_status]||0)+1,a),{}),sample:{total:sampleOut.length}},samplePred:sampleOut};
 }
 async function main() {
   const root = path.resolve(__dirname, "..");
