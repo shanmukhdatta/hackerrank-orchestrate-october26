@@ -4,7 +4,7 @@ The engine uses **symbolic AI** (evidence-based inference and explicit policy ru
 
 ## Run
 
-Requirements: Python 3.9+ (for the starter entrypoint) and **Node.js 18+**.
+Requirements: Python 3.10+ and **Node.js 18+**. To reproduce the full multimodal evidence run, also install Tesseract OCR and Poppler (`pdftotext`). `code/main.py` automatically extracts missing PDF/screenshot text when both commands are available. GitHub Actions installs them automatically.
 
 From the repository root:
 
@@ -14,7 +14,7 @@ node code/evaluation/tests.js
 python3 code/evaluation/main.py
 ```
 
-The first command produces `output.csv` in the repository root plus `code/evaluation/evaluation_report.md` and `code/evaluation/usage_report.md`. The second runs three independent synthetic scenarios. The third validates that output has the exact schema, all 518 cases, sorted keys, and sequential steps.
+The first command produces `output.csv` and diagnostic CSV/JSON files. The second runs three independent synthetic scenarios. The third generates the measured evaluation and usage reports, checks schema and ordering, and highlights unsupported predictions. The quality of predictions must be assessed separately from build success.
 
 ## Architecture
 
@@ -27,7 +27,7 @@ The first command produces `output.csv` in the repository root plus `code/evalua
 
 ## Important limits
 
-- Images/PDFs are not parsed by the zero-dependency runner. The architecture should be extended with optical text/PDF extraction to cover every multimodal evidence source.
+- Images/PDFs are converted to text using local Tesseract and Poppler. OCR is imperfect and can misattribute identities across rows. Without these executable tools, the engine warns and generates lower-coverage results.
 - `system_activity.csv` is not treated as an authoritative snapshot because the challenge identifies workflow claims as untrusted.
 - The provided sample answers are **evaluation-only**; they never feed prediction decisions.
 - Reports state observed results from this deterministic implementation; they do not claim hidden-grader accuracy or LLM usage.
@@ -41,4 +41,4 @@ The first command produces `output.csv` in the repository root plus `code/evalua
 - `code/evaluation/evaluation_report.md`: sample metrics + limitations
 - `code/evaluation/usage_report.md`: actual model-token and cost breakdown
 
-To package: `zip -r code.zip README.md code -x '*__pycache__*'`.
+To package: `python3 code/package.py`. Do not include the raw `dataset/` directory in `code.zip`.
