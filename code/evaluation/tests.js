@@ -53,14 +53,14 @@ async function scenario(label,email,requestText,records,expectedStatus,expectedO
   {
     const email="old@example.org", user="user_1";
     const fixtures={
-      "dataset/deletion_requests.csv":HEAD+"case_999,"+email+",2026-09-01T10:00:00Z,COMPLETE,2026-09-01T11:00:00Z,2026-09-02T10:00:00Z,Please delete my account.\\n",
+      "dataset/deletion_requests.csv":HEAD+"case_999,"+email+",2026-09-01T10:00:00Z,COMPLETE,2026-09-01T11:00:00Z,2026-09-02T10:00:00Z,Please delete my account.\n",
       "dataset/sample_deletion_requests.csv":HEAD,
-      "dataset/sample_output.csv":"case_id,deletion_status,steps_json\\n",
-      "dataset/user_identities.csv":IDS_HEAD+"user_1,Example User,new@example.org,,,2026-08-01T00:00:00Z\\n",
-      "dataset/user_audit_log.csv":"audit_id,user_id,event_time,field_name,old_value,new_value\\naudit_1,user_1,2026-08-01T00:00:00Z,email,old@example.org,new@example.org\\n",
-      "dataset/system_activity.csv":"activity_id,event_time,event_type,source_system,target_system,resource_id,reported_result,details\\n",
+      "dataset/sample_output.csv":"case_id,deletion_status,steps_json\n",
+      "dataset/user_identities.csv":IDS_HEAD+"user_1,Example User,new@example.org,,,2026-08-01T00:00:00Z\n",
+      "dataset/user_audit_log.csv":"audit_id,user_id,event_time,field_name,old_value,new_value\naudit_1,user_1,2026-08-01T00:00:00Z,email,old@example.org,new@example.org\n",
+      "dataset/system_activity.csv":"activity_id,event_time,event_type,source_system,target_system,resource_id,reported_result,details\n",
       "dataset/deletion_rules.csv":RULES,
-      "dataset/evidence_files.csv":EVIDENCE_HEADER+"evidence_01,evidence/records/test.json,test,2026-09-02T09:00:00Z\\n",
+      "dataset/evidence_files.csv":EVIDENCE_HEADER+"evidence_01,evidence/records/test.json,test,2026-09-02T09:00:00Z\n",
       "dataset/evidence/records/test.json":JSON.stringify({records:[{resource_id:"account_100",record_type:"USER_PROFILE",result:"NOT_FOUND",subject_reference:user,recorded_at:"2026-09-02T09:00:00Z"}]})
     };
     const result=await runtimeAudit(async p=>fixtures[p]);
@@ -75,14 +75,14 @@ async function scenario(label,email,requestText,records,expectedStatus,expectedO
       JSON.stringify({resource_id:"account_100",record_type:"USER_PROFILE",result,subject_reference:"user_1"})+
       "','2026-09-02T09:00:00Z');";
     const fixtures={
-      "dataset/deletion_requests.csv":HEAD+"case_999,user1@example.org,2026-09-01T10:00:00Z,COMPLETE,2026-09-01T11:00:00Z,2026-09-02T10:00:00Z,Please delete my account.\\n",
+      "dataset/deletion_requests.csv":HEAD+"case_999,user1@example.org,2026-09-01T10:00:00Z,COMPLETE,2026-09-01T11:00:00Z,2026-09-02T10:00:00Z,Please delete my account.\n",
       "dataset/sample_deletion_requests.csv":HEAD,
-      "dataset/sample_output.csv":"case_id,deletion_status,steps_json\\n",
-      "dataset/user_identities.csv":IDS_HEAD+"user_1,Example User,user1@example.org,,,2026-08-01T00:00:00Z\\n",
-      "dataset/user_audit_log.csv":"audit_id,user_id,event_time,field_name,old_value,new_value\\n",
-      "dataset/system_activity.csv":"activity_id,event_time,event_type,source_system,target_system,resource_id,reported_result,details\\n",
+      "dataset/sample_output.csv":"case_id,deletion_status,steps_json\n",
+      "dataset/user_identities.csv":IDS_HEAD+"user_1,Example User,user1@example.org,,,2026-08-01T00:00:00Z\n",
+      "dataset/user_audit_log.csv":"audit_id,user_id,event_time,field_name,old_value,new_value\n",
+      "dataset/system_activity.csv":"activity_id,event_time,event_type,source_system,target_system,resource_id,reported_result,details\n",
       "dataset/deletion_rules.csv":RULES,
-      "dataset/evidence_files.csv":EVIDENCE_HEADER+"evidence_01,evidence/databases/test.sql,test,2026-09-02T09:00:00Z\\n",
+      "dataset/evidence_files.csv":EVIDENCE_HEADER+"evidence_01,evidence/databases/test.sql,test,2026-09-02T09:00:00Z\n",
       "dataset/evidence/databases/test.sql":defs+sqlRow("customer_data_primary","NOT_FOUND")+sqlRow("customer_data_read_replica","FOUND")
     };
     const result=await runtimeAudit(async p=>fixtures[p]);
@@ -93,12 +93,12 @@ async function scenario(label,email,requestText,records,expectedStatus,expectedO
   // A shared email must never be silently assigned to the last user in the map.
   {
     const fixtures={
-      "dataset/deletion_requests.csv":HEAD+"case_999,shared@example.org,2026-09-01T10:00:00Z,COMPLETE,2026-09-01T11:00:00Z,2026-09-02T10:00:00Z,Please delete my account.\\n",
+      "dataset/deletion_requests.csv":HEAD+"case_999,shared@example.org,2026-09-01T10:00:00Z,COMPLETE,2026-09-01T11:00:00Z,2026-09-02T10:00:00Z,Please delete my account.\n",
       "dataset/sample_deletion_requests.csv":HEAD,
-      "dataset/sample_output.csv":"case_id,deletion_status,steps_json\\n",
-      "dataset/user_identities.csv":IDS_HEAD+"user_1,A,shared@example.org,,,2026-08-01T00:00:00Z\\nuser_2,B,shared@example.org,,,2026-08-01T00:00:00Z\\n",
-      "dataset/user_audit_log.csv":"audit_id,user_id,event_time,field_name,old_value,new_value\\n",
-      "dataset/system_activity.csv":"activity_id,event_time,event_type,source_system,target_system,resource_id,reported_result,details\\n",
+      "dataset/sample_output.csv":"case_id,deletion_status,steps_json\n",
+      "dataset/user_identities.csv":IDS_HEAD+"user_1,A,shared@example.org,,,2026-08-01T00:00:00Z\nuser_2,B,shared@example.org,,,2026-08-01T00:00:00Z\n",
+      "dataset/user_audit_log.csv":"audit_id,user_id,event_time,field_name,old_value,new_value\n",
+      "dataset/system_activity.csv":"activity_id,event_time,event_type,source_system,target_system,resource_id,reported_result,details\n",
       "dataset/deletion_rules.csv":RULES,
       "dataset/evidence_files.csv":EVIDENCE_HEADER
     };
