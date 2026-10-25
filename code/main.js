@@ -29,6 +29,16 @@ async function runtimeAudit(load) {
   }
   const emailToUser=new Map([...emailToUsers].filter(([,owners])=>owners.size===1).map(([email,owners])=>[email,[...owners][0]]));
   const ambiguousEmails=[...emailToUsers].filter(([,owners])=>owners.size>1).map(([email])=>email);
+  // Explicit, verified identity aliases; no fuzzy-name matching.
+  const aliasOwners=new Map();
+  for(const [uid,values] of aliases)for(const value of values){
+    if(!aliasOwners.has(value))aliasOwners.set(value,new Set());
+    aliasOwners.get(value).add(uid);
+  }
+  const uniqueOwner=value=>{
+    const candidate=aliasOwners.get(norm(value));
+    return candidate&&candidate.size===1?[...candidate][0]:null;
+  };
   const observation=[];const latestOwner=new Map(); let sourceCount=0, skipped=[];
   const serviceOf=(rid,hint="")=>{
     if(/^(account_|tombstone_)/.test(rid))return rid.startsWith("tombstone_")?"identity_service":"account_service";
@@ -96,7 +106,7 @@ async function runtimeAudit(load) {
     const t=getTime(rec,time);let state=infer(rid,rec);if(!state)return;
     let sys=rec.system||rec.origin_system||rec.data_store||hint||serviceOf(rid);sys=serviceOf(rid,sys);
     const v=Object.values(rec).flatMap(x=>typeof x==="string"?tokens(x):[]);const ident=new Set(v);
-    for(const k of ["subject_reference","customer_reference","user_id","lookup_key","match_key","correlation_key","subject_key","customer_email","email","requester_email","owner_email"])if(rec[k])ident.add(norm(rec[k]));
+    for(const k of ["subject_reference","customer_reference","user_id","lookup_key","match_key","correlation_key","subject_key","customer_email","email","requester_email","owner_email","phone","email_hash","requester_phone","customer_phone"])if(rec[k])ident.add(norm(rec[k]));
     observation.push({rid,sys,state,time:t,evidence,category:category(rid,rec),
       // Preserve the physical SQL table so a deleted primary cannot hide a live replica.
       store:rec.physical_store||sys,ident:[...ident],rec});
@@ -108,6 +118,9 @@ async function runtimeAudit(load) {
       const iso=line.match(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ/);
       const when=iso?iso[0]:time;
       let r=parseKV(line);
+      // Some supplied service logs use JSON rather than key=value. Keep trace context.
+      const jsonStart=line.indexOf("{");
+      if(jsonStart!==-1){try{r={...r,...JSON.parse(line.slice(jsonStart))}}catch{}}
       if(r.message)r={...r,...parseKV(r.message)};
       if(r.trace_id&&r.event&&/(started|requested|lookup_started|query_started|scan_started)$/.test(r.event))
         traces.set(r.trace_id,{...r});
@@ -218,8 +231,8 @@ async function runtimeAudit(load) {
   }
   // Infer historical ownership of anonymized/readback resources by earlier observations.
   const owners=new Map();
-  for(const o of observation)for(const token of o.ident){let user=token.startsWith("user_")?token:emailToUser.get(token);if(user&&users.has(user)){if(!owners.has(o.rid))owners.set(o.rid,new Set());owners.get(o.rid).add(user)}}
-  for(const a of activities){const rid=a.resource_id;const usersFound=new Set(tokens(a.details).map(t=>t.startsWith("user_")?t:emailToUser.get(t)).filter(Boolean));for(const user of usersFound){if(!owners.has(rid))owners.set(rid,new Set());owners.get(rid).add(user)}}
+  for(const o of observation)for(const token of o.ident){let user=token.startsWith("user_")?token:uniqueOwner(token);if(user&&users.has(user)){if(!owners.has(o.rid))owners.set(o.rid,new Set());owners.get(o.rid).add(user)}}
+  for(const a of activities){const rid=a.resource_id;const usersFound=new Set(tokens(a.details).map(t=>t.startsWith("user_")?t:uniqueOwner(t)).filter(Boolean));for(const user of usersFound){if(!owners.has(rid))owners.set(rid,new Set());owners.get(rid).add(user)}}
   const phaseOperations=[
     ["REPORT_REMAINING_RECORD","REPORT_EXPOSED_PII","REPORT_ACTIVE_DATA_FLOW","REPORT_RESTORE_RISK"],
     ["DISABLE_DATA_FLOW","BLOCK_RESTORE","DELETE_RECORD","REDACT_RECORD","ANONYMIZE_RECORD"],
@@ -252,7 +265,10 @@ async function runtimeAudit(load) {
     const mine=observation.filter(o=>{
       if(o.time&&o.time>c.audit_at)return false;
        if(captureByEvidence.get(o.evidence)&&captureByEvidence.get(o.evidence)>c.audit_at)return false;
-      return (owners.get(o.rid)?.has(id))||o.ident.some(v=>aliasSet.has(v)||norm(c.email)===v);
+      const resourceOwners=owners.get(o.rid);
+      // Never attribute a record owned by two candidates to one user by default.
+      return (resourceOwners?.size===1&&resourceOwners.has(id))||
+        o.ident.some(v=>aliasSet.has(v)||norm(c.email)===v);
     });
     // Reconstruct each physical copy independently before assessing the resource.
     const byStore=new Map();
