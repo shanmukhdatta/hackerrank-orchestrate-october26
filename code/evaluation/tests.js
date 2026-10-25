@@ -105,5 +105,10 @@ async function scenario(label,email,requestText,records,expectedStatus,expectedO
     await assert.rejects(()=>runtimeAudit(async p=>fixtures[p]),/Identity unresolved or ambiguous/);
     tests.push({label:"Ambiguous identity rejected",status:"PASS"});
   }
+  await assert.rejects(
+    ()=>scenario("Unresolved intent must be reviewed","user1@example.org","Can you help with my account?",[absent],"NOT_APPLICABLE",[]),
+    /Uncertain deletion intent/
+  );
+  tests.push({label:"Uncertain intent rejected",status:"PASS"});
   console.log(JSON.stringify({pass:tests.length,tests},null,2));
 })().catch(e=>{console.error(e);process.exitCode=1});
