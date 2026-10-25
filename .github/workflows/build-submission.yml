@@ -32,6 +32,8 @@ jobs:
             sudo apt-get install -y -qq poppler-utils tesseract-ocr
           fi
           python3 code/extract_media.py
+      - name: Run independent synthetic regression tests
+        run: node code/evaluation/tests.js
       - name: Run evidence audit for all cases
         run: python3 code/main.py
       - name: Validate predictions and generate reports
