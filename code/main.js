@@ -123,6 +123,15 @@ async function runtimeAudit(load) {
       const iso=line.match(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ/);
       const when=iso?iso[0]:time;
       let r=parseKV(line);
+      // Pipe-delimited operational streams place service, trace and event in
+      // their header rather than in key=value fields. Preserve that provenance.
+      const pipe=line.match(/^\S+\s+\|\s+\w+\s+\|\s+([a-z_]+)\s+\|\s+(tr-\d+)\s+\|\s+([a-z_]+)\s+\|/i);
+      if(pipe){r.service=r.service||pipe[1];r.trace_id=r.trace_id||pipe[2];r.event=r.event||pipe[3];}
+      // RFC5424-style syslog puts its trace identifier in a header field,
+      // rather than in key=value payload fields. The started and completed
+      // events share that trace and must be joined before resource ownership.
+      const headerTrace=line.match(/\btr-\d+\b/);
+      if(headerTrace && !r.trace_id)r.trace_id=headerTrace[0];
       // Some supplied service logs use JSON rather than key=value. Keep trace context.
       const jsonStart=line.indexOf("{");
       if(jsonStart!==-1){try{r={...r,...JSON.parse(line.slice(jsonStart))}}catch{}}
