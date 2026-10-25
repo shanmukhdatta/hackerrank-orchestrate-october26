@@ -63,7 +63,8 @@ async function runtimeAudit(load) {
     if(kind==="BACKUP_ARCHIVE")return r.restore_allowed!==undefined?(tri(r.restore_allowed)?"ACTIVE":"BLOCKED"):raw==="ACTIVE"?"ACTIVE":raw==="BLOCKED"?"BLOCKED":"";
     if(r.status_code!==undefined)return Number(r.status_code)===404?"ABSENT":Number(r.status_code)===200?"PRESENT":"";
     if(r.rows!==undefined&&(/profile_lookup_completed|audit_record_read_completed|.*_read_completed/.test(String(r.event||""))))return String(r.rows)==="0"?"ABSENT":"PRESENT";
-    if(["NOT_FOUND","MISSING","ABSENT","DELETED","404","NO_MATCH"].includes(raw))return "ABSENT";
+    if(kind==="USER_PROFILE"&&raw==="DELETED"&&["email","phone","full_name","name","email_hash"].some(k=>r[k]!=null&&r[k]!==""))return "PRESENT";
+     if(["NOT_FOUND","MISSING","ABSENT","DELETED","404","NO_MATCH"].includes(raw))return "ABSENT";
     if(["FOUND","PRESENT","EXISTS","HIT","ACTIVE","IDENTIFIABLE","UNREDACTED","200","SUCCESS"].includes(raw))return "PRESENT";
     if(["REDACTED","ANONYMIZED","DISABLED","BLOCKED"].includes(raw))return raw;
     if(raw==="NOT_FOUND")return "ABSENT";
@@ -90,7 +91,7 @@ async function runtimeAudit(load) {
     for(const k of ["subject_reference","customer_reference","user_id","lookup_key","match_key","correlation_key","subject_key","customer_email","email","requester_email","owner_email"])if(rec[k])ident.add(norm(rec[k]));
     observation.push({rid,sys,state,time:t,evidence,category:category(rid,rec),ident:[...ident],rec});
   };
-  const parseKV=s=>{let r={};for(const m of s.matchAll(/([A-Za-z_][\w]*)=(?:"((?:\\.|[^"\\])*)"|([^\s]+))/g)){let v=m[2]===undefined?m[3]:m[2];v=v.replace(/\\"/g,'"').replace(/\\\\/g,"\\");r[m[1]]=v}return r};
+  const parseKV=s=>{let r={};for(const m of s.matchAll(/([A-Za-z_][\w]*)=(?:"((?:\\.|[^"\\])*)"|([^\s]+))/g)){let v=m[2]===undefined?m[3]:m[2];v=v.replace(/\\"/g,'"').replace(/\\\\/g,"\\");r[m[1]]=/^(?:null|none)$/i.test(v)?null:v}return r};
   const parseLog=(s,eid,time)=>{
     const traces=new Map();
     for(const line of s.split(/\r?\n/)){
@@ -114,6 +115,7 @@ async function runtimeAudit(load) {
       if(event==="support_ticket_read_completed")r.record_type="SUPPORT_MESSAGE";
       if(event==="profile_lookup_completed")r.record_type="USER_PROFILE";
       if(event==="contact_lookup_completed")r.record_type="MARKETING_PROFILE";
+       if(event==="contact_query_completed"&&/legacy_contact_index/i.test(String(r.source||"")))r.record_type="SECONDARY_IDENTIFIER";
       if(event==="restore_policy_read_completed")r.record_type="BACKUP_ARCHIVE";
       if(event==="connector_config_read_completed")r.record_type="DATA_FLOW";
       if(event==="audit_record_read_completed")r.record_type="SECURITY_AUDIT_LOG";
@@ -220,7 +222,7 @@ async function runtimeAudit(load) {
     // Intention is determined from the request text, not the reported status.
     // Inflection-aware and multilingual: the public data includes six languages.
     s=norm(s).normalize("NFKC");
-    const negate=/\b(do not delete|don't delete|not requesting deletion|not a deletion request|keep my account|cancel my deletion request|no deletion requested)\b/i.test(s);
+    const negate=/\b(do not delete|don't delete|do not close|don't close|do not erase|don't erase|not asking for deletion|not requesting deletion|not a deletion request|not a request to erase|not a request to delete|keep my account|keep the account|leave the account active|leave my profile|cancel my deletion request|no deletion requested|without removing any|without deleting any|marketing lists only|marketing emails only|marketing opt.?out only|promotional emails only|remove me from marketing lists|i still need the account)\b/i.test(s);
     const request=/\b(delet\w*|eras\w*|remov\w*|clos\w*|cancell\w*|forget\s+me|account\s+closure|permanent\w*\s+remov\w*|desaparecer|suppres\w*|supprim\w*|effac\w*|elimin\w*|borrar|apagar|excluir|exclusão|löschen|lösch\w*|rimuov\w*)\b|удал|削除|消去|删除|삭제|حذف|हटाना|मिटा/i.test(s);
     return (request||/profile\s+(?:is\s+)?gone|records?\s+cannot\s+identify\s+me/i.test(s))&&!negate;
   };
