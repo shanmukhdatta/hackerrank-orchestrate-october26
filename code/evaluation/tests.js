@@ -6,7 +6,7 @@ const HEAD = "case_id,email,requested_at,reported_status,reported_at,audit_at,re
 const EVIDENCE_HEADER="file_id,file_path,origin,captured_at\n";
 const IDS_HEAD="user_id,name,email,phone,email_hash,updated_at\n";
 const RULES="rule_id,data_category,condition,required_action\nrule_01,USER_PROFILE,Always,DELETE\nrule_02,SEARCH_INDEX_ENTRY,Always,DELETE\nrule_03,SECURITY_AUDIT_LOG,Within retention,RETAIN\n";
-async function scenario(label,email,requestText,records,expectedStatus,expectedOps) {
+async function scenario(label,email,requestText,records,expectedStatus,expectedOps,logEvidence=null) {
   const fixtures = {
     "dataset/deletion_requests.csv":HEAD+"case_999,"+email+",2026-09-01T10:00:00Z,COMPLETE,2026-09-01T11:00:00Z,2026-09-02T10:00:00Z,"+requestText+"\n",
     "dataset/sample_deletion_requests.csv":HEAD,
@@ -15,8 +15,8 @@ async function scenario(label,email,requestText,records,expectedStatus,expectedO
     "dataset/user_audit_log.csv":"audit_id,user_id,event_time,field_name,old_value,new_value\n",
     "dataset/system_activity.csv":"activity_id,event_time,event_type,source_system,target_system,resource_id,reported_result,details\n",
     "dataset/deletion_rules.csv":RULES,
-    "dataset/evidence_files.csv":EVIDENCE_HEADER+"evidence_01,evidence/records/test.json,test,2026-09-02T09:00:00Z\n",
-    "dataset/evidence/records/test.json":JSON.stringify({records})
+    "dataset/evidence_files.csv":EVIDENCE_HEADER+`evidence_01,${logEvidence===null?"evidence/records/test.json":"evidence/logs/test.log"},test,2026-09-02T09:00:00Z\n`,
+    ...(logEvidence===null?{"dataset/evidence/records/test.json":JSON.stringify({records})}:{"dataset/evidence/logs/test.log":logEvidence})
   };
   const result=await runtimeAudit(async p=>{if(!(p in fixtures)) throw Error(p);return fixtures[p]});
   const data=result.csv.trim().split("\n").slice(1).join("\n");
@@ -36,5 +36,14 @@ async function scenario(label,email,requestText,records,expectedStatus,expectedO
   tests.push(await scenario("No erasure request","user1@example.org","Please email my order invoice.",[absent],"NOT_APPLICABLE",[]));
   tests.push(await scenario("Deletion verified","user1@example.org","Please delete my account.",[absent,retained],"COMPLETE",["VERIFY_RECORD_ABSENT","VERIFY_RECORD_PRESENT"]));
   tests.push(await scenario("Active sync blocks erasure","user1@example.org","Please delete my account.",[absent,retained,{resource_id:"data_flow_100",system:"integration_service",record_type:"DATA_FLOW",enabled:true,subject_reference:"user_1",recorded_at:"2026-09-02T09:00:00Z"}],"INCOMPLETE",["REPORT_ACTIVE_DATA_FLOW","DISABLE_DATA_FLOW","VERIFY_RECORD_ABSENT","VERIFY_RECORD_PRESENT","VERIFY_DATA_FLOW_DISABLED"]));
+  tests.push(await scenario("Explicitly not requesting deletion","user1@example.org","I am not asking for deletion. Please stop promotional emails.",[absent],"NOT_APPLICABLE",[]));
+  tests.push(await scenario("Do not close account","user1@example.org","Please do not close my account.",[absent],"NOT_APPLICABLE",[]));
+  tests.push(await scenario("Correction only","user1@example.org","Correct my surname without removing any of my records.",[absent],"NOT_APPLICABLE",[]));
+  tests.push(await scenario("Marketing unsubscribe only","user1@example.org","Please remove me from marketing lists only. I still need my account.",[absent],"NOT_APPLICABLE",[]));
+  tests.push(await scenario("Deleted status still exposes personal data","user1@example.org","Please delete my account.",[{resource_id:"account_100",system:"account_service",record_type:"USER_PROFILE",account_status:"DELETED",email:"user1@example.org",subject_reference:"user_1",recorded_at:"2026-09-02T09:00:00Z"}],"INCOMPLETE",["REPORT_REMAINING_RECORD","DELETE_RECORD","VERIFY_RECORD_ABSENT"]));
+  const anonymousLog="2026-09-02T09:00:00Z level=INFO service=analytics_platform event=analytics_profile_read_completed resource_id=analytics_100 lookup_key=user_1 customer_reference=user_1 email=null phone=null email_hash=null audience_cohort=test\\n";
+  tests.push(await scenario("Null-valued identifiers are not PII","user1@example.org","Please delete my account.",[],"COMPLETE",["VERIFY_RECORD_ANONYMIZED"],anonymousLog));
+  const contactLog="2026-09-02T09:00:00Z level=DEBUG service=support_replica trace_id=test123 event=contact_query_started lookup_key=user1@example.org source=legacy_contact_index\\n2026-09-02T09:00:01Z level=INFO service=support_replica trace_id=test123 event=contact_query_completed resource_id=support_200 rows=1\\n";
+  tests.push(await scenario("Legacy contact index must be deleted","user1@example.org","Please delete my account.",[],"INCOMPLETE",["REPORT_REMAINING_RECORD","DELETE_RECORD","VERIFY_RECORD_ABSENT"],contactLog));
   console.log(JSON.stringify({pass:tests.length,tests},null,2));
 })().catch(e=>{console.error(e);process.exitCode=1});
