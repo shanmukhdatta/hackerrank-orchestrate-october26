@@ -21,7 +21,7 @@ evidence files; 2745 observations; matched ownership for
 1674 resources.
 Predicted status counts: {"COMPLETE": 156, "INCOMPLETE": 357, "NOT_APPLICABLE": 5}.
 Full-output contract validation issues: **0**.
-Cases with incomplete assessment but no grounded action steps: **32** (needs further evidence, not fabricated).
+Cases with incomplete assessment but no grounded action steps: **32** (blocking quality gap; needs independent evidence, not fabricated).
 
 ## Independent constructed evaluation cases
 
@@ -71,7 +71,8 @@ truth for any hidden customer.
 - Added direct observation precedence rather than trusting a workflow's
   reported success.
 - Added case/field/step and sequence scoring, plus independent contract tests.
-- Remaining limitations: screenshots and PDFs are not interpreted; some
+- Remaining limitations: screenshots and PDFs are only approximately interpreted
+  using OCR/text extraction and can generate false associations; some
   anonymized records cannot be linked once historical identifiers disappear;
   overlapping snapshots can give conflicting observations; intent detection
   across languages and complex account merges requires refinement.
