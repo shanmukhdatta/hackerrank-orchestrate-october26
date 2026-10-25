@@ -62,3 +62,12 @@ jobs:
             code/evaluation/*.md
           if-no-files-found: warn
           retention-days: 15
+
+      - name: Preserve participant-facing data for local reproducibility checks
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghost-data-debug-dataset
+          path: dataset/
+          if-no-files-found: error
+          retention-days: 1
