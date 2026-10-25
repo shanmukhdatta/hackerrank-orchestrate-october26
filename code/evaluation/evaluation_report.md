@@ -8,18 +8,18 @@ not prediction input. No hidden labels were used.
 
 | Metric | Numerator / denominator | Score |
 |---|---:|---:|
-| Case-level deletion-status accuracy | 28/32 | 87.50% |
+| Case-level deletion-status accuracy | 29/32 | 90.62% |
 | Exact complete-row accuracy | 7/32 | 21.88% |
-| Ordered operation-sequence accuracy | 8/32 | 25.00% |
-| Positional field-level accuracy | 720/1182 | 60.91% |
-| Full step precision | 131/162 | 80.86% |
-| Full step recall | 131/193 | 67.88% |
-| Full step F1 | - | 73.80% |
+| Ordered operation-sequence accuracy | 7/32 | 21.88% |
+| Positional field-level accuracy | 803/1182 | 67.94% |
+| Full step precision | 160/164 | 97.56% |
+| Full step recall | 160/193 | 82.90% |
+| Full step F1 | - | 89.64% |
 
 Full run: **518 cases**; parsed 94 machine-readable
 evidence files; 2745 observations; matched ownership for
 1674 resources.
-Predicted status counts: {"COMPLETE": 159, "INCOMPLETE": 349, "NOT_APPLICABLE": 10}.
+Predicted status counts: {"COMPLETE": 151, "INCOMPLETE": 357, "NOT_APPLICABLE": 10}.
 Full-output contract validation issues: **0**.
 Cases with incomplete assessment but no grounded action steps: **27** (blocking quality gap; needs independent evidence, not fabricated).
 
@@ -50,14 +50,14 @@ truth for any hidden customer.
 - case_20: expected INCOMPLETE (8 steps); predicted INCOMPLETE (6 steps)
 - case_21: expected COMPLETE (3 steps); predicted COMPLETE (1 steps)
 - case_22: expected INCOMPLETE (8 steps); predicted INCOMPLETE (7 steps)
-- case_23: expected INCOMPLETE (8 steps); predicted INCOMPLETE (7 steps)
-- case_24: expected INCOMPLETE (7 steps); predicted INCOMPLETE (7 steps)
+- case_23: expected INCOMPLETE (8 steps); predicted INCOMPLETE (6 steps)
+- case_24: expected INCOMPLETE (7 steps); predicted INCOMPLETE (6 steps)
 - case_25: expected COMPLETE (3 steps); predicted COMPLETE (1 steps)
 - case_26: expected COMPLETE (6 steps); predicted COMPLETE (5 steps)
 - case_27: expected COMPLETE (6 steps); predicted COMPLETE (5 steps)
 - case_28: expected COMPLETE (6 steps); predicted COMPLETE (4 steps)
-- case_29: expected INCOMPLETE (14 steps); predicted INCOMPLETE (11 steps)
-- case_30: expected INCOMPLETE (14 steps); predicted INCOMPLETE (11 steps)
+- case_29: expected INCOMPLETE (14 steps); predicted INCOMPLETE (12 steps)
+- case_30: expected INCOMPLETE (14 steps); predicted INCOMPLETE (12 steps)
 - case_31: expected COMPLETE (3 steps); predicted COMPLETE (2 steps)
 
 ## Contract-validation findings
