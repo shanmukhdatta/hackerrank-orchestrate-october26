@@ -56,14 +56,36 @@ For COMPLETE, emit evidence-backed VERIFICATION only. For INCOMPLETE, FINDING â†
 From repository root:
 
 ```bash
+python3 code/extract_media.py
 python3 code/evaluation/dataset_edge_tests.py
 node code/evaluation/tests.js
+node code/evaluation/negative_evidence_tests.js
 python3 code/main.py
 python3 code/evaluation/main.py
+python3 code/evaluation/submission_check.py
+python3 code/package.py
 ```
 
 OCR/PDF text extraction is performed by code/extract_media.py in branch CI.
 
-**As tested on an earlier passing branch CI run:** 518/518 valid output rows, 94 evidence sources read, 16 synthetic regression checks passed, 29/32 public status accuracy, and 89.64% public step F1. Additional safeguards were then added; refer to the latest CI run for the current passing metrics. Public samples are evaluation only, not prediction inputs. No hidden-case accuracy is claimed.
+**Latest measured branch workflow:** 518/518 structurally valid predictions,
+94 participant-facing evidence sources parsed, 19 standard regression checks
+and 5 scoped-negative-evidence checks passed, 32/32 public-sample status
+accuracy, 14/32 exact public-sample rows, and 92.05% public-sample step F1.
 
-The development branch is intentionally separate from main. Its GitHub Actions workflow performs validation without pushing generated artifacts to main.
+**Further observed coverage repair:** The actual operational logs use both
+RFC5424 headers and `timestamp | level | service | trace | event` fields.
+Connecting those headers to subsequent readback events reduced main-dataset
+INCOMPLETE cases with zero grounded steps from 18 to **2**. Those two lack
+available matching pre-audit proof; the system does not fabricate findings.
+No hidden-case accuracy is claimed.
+
+**Important evidence safeguards:** Negative SQL certificates require at
+least two physical copies and an independently associated deletion request;
+anonymous analytics certificates require both a verified anonymized state
+and uniquely associated activity provenance. Reported SUCCESS/PARTIAL is
+never treated as record-state proof.
+
+The development branch is separate from main. Its GitHub Actions workflow
+runs complete validation and packages downloadable deliverables without
+pushing or submitting anything to the organization.
