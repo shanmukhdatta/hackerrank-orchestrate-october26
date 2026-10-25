@@ -19,10 +19,30 @@ async function runtimeAudit(load) {
   const norm=s=>String(s??"").trim().toLowerCase();
   const tokens=s=>[...new Set((String(s??"").toLowerCase().match(/[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}|user_\d+|[a-f0-9]{64}/g)||[]))];
   const aliases=new Map(); const users=new Map();
-  for(const id of ids){users.set(id.user_id,id); const set=new Set([id.user_id]);for(const k of ["email","name","phone","email_hash"])if(id[k])set.add(norm(id[k]));aliases.set(id.user_id,set)}
+  for(const id of ids){users.set(id.user_id,id); const set=new Set([id.user_id]);for(const k of ["email","phone","email_hash"])if(id[k])set.add(norm(id[k]));aliases.set(id.user_id,set)}
   for(const c of changes)if(aliases.has(c.user_id)){for(const k of ["old_value","new_value"])if(c[k])aliases.get(c.user_id).add(norm(c[k]))}
-  const emailToUser=new Map();for(const [u,vs] of aliases)for(const v of vs)if(v.includes("@"))emailToUser.set(v,u);
+  // The graph keeps every candidate owner. Never let Map.set silently overwrite an ambiguous email.
+  const emailToUsers=new Map();
+  for(const [u,vs] of aliases)for(const v of vs)if(v.includes("@")){
+    if(!emailToUsers.has(v))emailToUsers.set(v,new Set());
+    emailToUsers.get(v).add(u);
+  }
+  const emailToUser=new Map([...emailToUsers].filter(([,owners])=>owners.size===1).map(([email,owners])=>[email,[...owners][0]]));
+  const ambiguousEmails=[...emailToUsers].filter(([,owners])=>owners.size>1).map(([email])=>email);
+  // Explicit, verified identity aliases; no fuzzy-name matching.
+  const aliasOwners=new Map();
+  for(const [uid,values] of aliases)for(const value of values){
+    if(!aliasOwners.has(value))aliasOwners.set(value,new Set());
+    aliasOwners.get(value).add(uid);
+  }
+  const uniqueOwner=value=>{
+    const candidate=aliasOwners.get(norm(value));
+    return candidate&&candidate.size===1?[...candidate][0]:null;
+  };
   const observation=[];const latestOwner=new Map(); let sourceCount=0, skipped=[];
+  // Inventory the complete set of rows of each physical SQL table, including empty tables.
+  // Presence and explicit scoped absence must both be supported by real, timestamped evidence.
+  const sqlTableInventory=[];
   const serviceOf=(rid,hint="")=>{
     if(/^(account_|tombstone_)/.test(rid))return rid.startsWith("tombstone_")?"identity_service":"account_service";
     if(/^search_/.test(rid))return "search_service";
@@ -35,6 +55,7 @@ async function runtimeAudit(load) {
     if(/^marketing_/.test(rid))return "marketing_service";
     if(/^cache_/.test(rid))return "cache_service";
     if(/^email_delivery_/.test(rid))return "email_delivery_service";
+    if(/^legal_hold_/.test(rid))return "legal_service";
     return hint||"unknown_service";
   };
   const category=(rid,rec={})=>{
@@ -51,6 +72,7 @@ async function runtimeAudit(load) {
     if(/^marketing_/.test(rid))return "MARKETING_PROFILE";
     if(/^cache_/.test(rid))return "CACHE_ENTRY";
     if(/^email_delivery_/.test(rid))return "EMAIL_DELIVERY_LOG";
+    if(/^legal_hold_/.test(rid))return "LEGAL_HOLD_RECORD";
     if(/^data_flow_/.test(rid))return "DATA_FLOW";
     return t;
   };
@@ -89,8 +111,10 @@ async function runtimeAudit(load) {
     const t=getTime(rec,time);let state=infer(rid,rec);if(!state)return;
     let sys=rec.system||rec.origin_system||rec.data_store||hint||serviceOf(rid);sys=serviceOf(rid,sys);
     const v=Object.values(rec).flatMap(x=>typeof x==="string"?tokens(x):[]);const ident=new Set(v);
-    for(const k of ["subject_reference","customer_reference","user_id","lookup_key","match_key","correlation_key","subject_key","customer_email","email","requester_email","owner_email"])if(rec[k])ident.add(norm(rec[k]));
-    observation.push({rid,sys,state,time:t,evidence,category:category(rid,rec),ident:[...ident],rec});
+    for(const k of ["subject_reference","customer_reference","user_id","lookup_key","match_key","correlation_key","subject_key","customer_email","email","requester_email","owner_email","phone","email_hash","requester_phone","customer_phone"])if(rec[k])ident.add(norm(rec[k]));
+    observation.push({rid,sys,state,time:t,evidence,category:category(rid,rec),
+      // Preserve the physical SQL table so a deleted primary cannot hide a live replica.
+      store:rec.physical_store||sys,ident:[...ident],rec});
   };
   const parseKV=s=>{let r={};for(const m of s.matchAll(/([A-Za-z_][\w]*)=(?:"((?:\\.|[^"\\])*)"|([^\s]+))/g)){let v=m[2]===undefined?m[3]:m[2];v=v.replace(/\\"/g,'"').replace(/\\\\/g,"\\");r[m[1]]=/^(?:null|none)$/i.test(v)?null:v}return r};
   const parseLog=(s,eid,time)=>{
@@ -99,6 +123,18 @@ async function runtimeAudit(load) {
       const iso=line.match(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ/);
       const when=iso?iso[0]:time;
       let r=parseKV(line);
+      // Pipe-delimited operational streams place service, trace and event in
+      // their header rather than in key=value fields. Preserve that provenance.
+      const pipe=line.match(/^\S+\s+\|\s+\w+\s+\|\s+([a-z_]+)\s+\|\s+(tr-\d+)\s+\|\s+([a-z_]+)\s+\|/i);
+      if(pipe){r.service=r.service||pipe[1];r.trace_id=r.trace_id||pipe[2];r.event=r.event||pipe[3];}
+      // RFC5424-style syslog puts its trace identifier in a header field,
+      // rather than in key=value payload fields. The started and completed
+      // events share that trace and must be joined before resource ownership.
+      const headerTrace=line.match(/\btr-\d+\b/);
+      if(headerTrace && !r.trace_id)r.trace_id=headerTrace[0];
+      // Some supplied service logs use JSON rather than key=value. Keep trace context.
+      const jsonStart=line.indexOf("{");
+      if(jsonStart!==-1){try{r={...r,...JSON.parse(line.slice(jsonStart))}}catch{}}
       if(r.message)r={...r,...parseKV(r.message)};
       if(r.trace_id&&r.event&&/(started|requested|lookup_started|query_started|scan_started)$/.test(r.event))
         traces.set(r.trace_id,{...r});
@@ -139,14 +175,28 @@ async function runtimeAudit(load) {
 
   function sqlValues(s){const out=[];let cell="",q=false;for(let i=0;i<s.length;i++){const c=s[i];if(c==="'"){if(q&&s[i+1]==="'"){cell+="'";i++}else q=!q}else if(c===","&&!q){out.push(cell.trim()==="NULL"?null:cell.trim());cell=""}else cell+=c}out.push(cell.trim()==="NULL"?null:cell.trim());return out}
   const parseSQL=(s,eid,time)=>{
-    const cols=new Map();for(const m of s.matchAll(/CREATE TABLE\s+"?(\w+)"?\s*\(([\s\S]*?)\);/gi)){let names=[];for(const col of m[2].matchAll(/(?:^|,)\s*"?(\w+)"?\s+(?:TEXT|INTEGER|REAL|BLOB)/gim))names.push(col[1]);cols.set(m[1],names)}
-    for(const m of s.matchAll(/INSERT INTO\s+"?(\w+)"?\s+VALUES\s*\((.*?)\);/gis)){
-      const values=sqlValues(m[2]),fields=cols.get(m[1])||[];let r=Object.fromEntries(values.map((v,i)=>[fields[i]||"field_"+i,v]));if(r.record_json){try{r={...r,...JSON.parse(r.record_json)}}catch{}}
-      const rid=r.resource_id||values.find(v=>typeof v==="string"&&/^(?:account|search|analytics|backup|data_flow|support|export|audit_record|tombstone)_\d+$/.test(v));
-      if(rid)add(rid,{...r,collection_name:r.collection_name||m[1]},eid,r.updated_at||time,r.origin_system);
+    const cols=new Map(),rows=new Map();
+    for(const m of s.matchAll(/CREATE TABLE\s+"?(\w+)"?\s*\(([\s\S]*?)\);/gi)){
+      let names=[];
+      for(const col of m[2].matchAll(/(?:^|,)\s*"?(\w+)"?\s+(?:TEXT|INTEGER|REAL|BLOB)/gim))names.push(col[1]);
+      cols.set(m[1],names); rows.set(m[1],[]);
     }
+    for(const m of s.matchAll(/INSERT INTO\s+"?(\w+)"?\s+VALUES\s*\((.*?)\);/gis)){
+      const values=sqlValues(m[2]),fields=cols.get(m[1])||[];
+      let r=Object.fromEntries(values.map((v,i)=>[fields[i]||"field_"+i,v]));
+      if(r.record_json){try{r={...r,...JSON.parse(r.record_json)}}catch{}}
+      const rid=r.resource_id||values.find(v=>typeof v==="string"&&/^(?:account|search|analytics|backup|data_flow|support|export|audit_record|tombstone)_\d+$/.test(v));
+      if(rid){
+        if(!rows.has(m[1]))rows.set(m[1],[]);
+        rows.get(m[1]).push({rid,user_id:r.user_id||null});
+        add(rid,{...r,collection_name:r.collection_name||m[1],physical_store:m[1]},eid,r.updated_at||time,r.origin_system);
+      }
+    }
+    for(const [table,items] of rows)
+      if(/^customer_profiles_(?:primary|failover_replica|read_replica|reporting_replica)$/.test(table))
+        sqlTableInventory.push({eid,time,table,items});
   };
-  const parseJSON=(s,eid,time)=>{
+    const parseJSON=(s,eid,time)=>{
     let root;try{root=JSON.parse(s)}catch{return}
     const walk=(node,ctx={},depth=0)=>{
       if(depth>16||!node||typeof node!=="object")return;
@@ -209,8 +259,72 @@ async function runtimeAudit(load) {
   }
   // Infer historical ownership of anonymized/readback resources by earlier observations.
   const owners=new Map();
-  for(const o of observation)for(const token of o.ident){let user=token.startsWith("user_")?token:emailToUser.get(token);if(user&&users.has(user)){if(!owners.has(o.rid))owners.set(o.rid,new Set());owners.get(o.rid).add(user)}}
-  for(const a of activities){const rid=a.resource_id;const usersFound=new Set(tokens(a.details).map(t=>t.startsWith("user_")?t:emailToUser.get(t)).filter(Boolean));for(const user of usersFound){if(!owners.has(rid))owners.set(rid,new Set());owners.get(rid).add(user)}}
+  for(const o of observation)for(const token of o.ident){let user=token.startsWith("user_")?token:uniqueOwner(token);if(user&&users.has(user)){if(!owners.has(o.rid))owners.set(o.rid,new Set());owners.get(o.rid).add(user)}}
+  for(const a of activities){const rid=a.resource_id;const usersFound=new Set(tokens(a.details).map(t=>t.startsWith("user_")?t:uniqueOwner(t)).filter(Boolean));for(const user of usersFound){if(!owners.has(rid))owners.set(rid,new Set());owners.get(rid).add(user)}}
+  // An anonymized record cannot be linked by its identifiers after compliant
+  // anonymization. A tightly bounded, *unique* request-to-operation association
+  // can propose provenance, but the anonymized snapshot (not operation SUCCESS)
+  // must independently prove its present state.
+  const allRequests=[...req,...sample];
+  const nearReported=(request,event,maxMinutes=12)=>
+    Math.abs(Date.parse(request.reported_at)-Date.parse(event.event_time))<=maxMinutes*60000;
+  const eventBelongsUniquely=(request,event)=>{
+    if(!nearReported(request,event))return false;
+    return allRequests.filter(other=>nearReported(other,event)).length===1;
+  };
+  const anonOperations=activities.filter(a=>a.event_type==="ANONYMIZE_RECORD"&&a.resource_id);
+  const linkedAnonymizedObservations=request=>observation.filter(o=>{
+    if(o.state!=="ANONYMIZED"||!o.evidence||!o.rid.startsWith("analytics_"))return false;
+    if(o.time&&o.time>request.audit_at)return false;
+    const captured=captureByEvidence.get(o.evidence);
+    if(!captured||captured>request.audit_at)return false;
+    const candidates=anonOperations.filter(a=>a.resource_id===o.rid&&
+      a.event_time<=request.audit_at&&a.event_time<=captured&&eventBelongsUniquely(request,a));
+    if(candidates.length!==1)return false;
+    const claimedOwner=owners.get(o.rid);
+    return !claimedOwner||claimedOwner.size===0;
+  });
+  // Negative readback certificates require a named account resource, two
+  // simultaneously captured physical stores, consistent observed account-to-user
+  // identifiers, an exact no-row check, and a unique operation relationship.
+  // Do not generalize "not in one sampled table" to all company databases.
+  const certifiedAccountAbsence=(request,user,hasLinkedAnon)=>{
+    const uid=/^user_(\d+)$/.exec(user);if(!uid)return [];
+    const num=Number(uid[1]);if(!Number.isSafeInteger(num))return [];
+    const knownAccountIds=[...owners].filter(([rid,set])=>/^account_\d+$/.test(rid)&&set.has(user)).map(([rid])=>rid);
+    const eligibleFileIds=[...new Set(sqlTableInventory.map(t=>t.eid))];
+    const certificates=[];
+    for(const eid of eligibleFileIds){
+      const tables=sqlTableInventory.filter(t=>t.eid===eid);
+      if(!tables.some(t=>t.table.endsWith("_primary"))||
+        !tables.some(t=>t.table.includes("_replica")))continue;
+      const captured=captureByEvidence.get(eid);
+      if(!captured||captured<=request.reported_at||captured>request.audit_at)continue;
+      const rows=tables.flatMap(t=>t.items);
+      if(rows.length===0)continue;
+      const pairs=rows.filter(r=>/^account_\d+$/.test(r.rid)&&/^user_\d+$/.test(r.user_id||""));
+      if(pairs.length!==rows.length || !pairs.every(r=>
+        Number(r.rid.split("_")[1])===Number(r.user_id.split("_")[1])))continue;
+      if(pairs.some(r=>r.user_id===user))continue;
+      const paddedWidth=Math.max(3,...pairs.filter(r=>/^account_0/.test(r.rid)).map(r=>r.rid.split("_")[1].length));
+      const rid="account_"+String(num).padStart(paddedWidth,"0");
+      if(knownAccountIds.some(x=>x!==rid))continue;
+      if(rows.some(r=>r.rid===rid))continue;
+      const associatedDeletion=activities.some(a=>a.event_type==="DELETE_RECORD"&&
+        a.resource_id===rid&&a.event_time<=captured&&eventBelongsUniquely(request,a));
+      if(!associatedDeletion&&!hasLinkedAnon)continue;
+      // If an intervening restore/sync event targets this resource, the older
+      // snapshot alone is not enough to certify its state at audit time.
+      const replay=activities.some(a=>a.resource_id===rid&&a.event_time>captured&&
+        a.event_time<=request.audit_at&&/SYNC|RESTORE|IMPORT|RECREATE/i.test(a.event_type));
+      if(replay)continue;
+      certificates.push({rid,sys:"account_service",store:"certified_primary_and_replica",
+        state:"ABSENT",category:"USER_PROFILE",time:captured,evidence:eid,
+        ident:[user,norm(request.email)],rec:{resource_id:rid,record_type:"USER_PROFILE",
+          result:"NOT_FOUND",physical_store:"certified_primary_and_replica"}});
+    }
+    return certificates;
+  };
   const phaseOperations=[
     ["REPORT_REMAINING_RECORD","REPORT_EXPOSED_PII","REPORT_ACTIVE_DATA_FLOW","REPORT_RESTORE_RISK"],
     ["DISABLE_DATA_FLOW","BLOCK_RESTORE","DELETE_RECORD","REDACT_RECORD","ANONYMIZE_RECORD"],
@@ -225,24 +339,77 @@ async function runtimeAudit(load) {
     s=norm(s).normalize("NFKC");
     const negate=/\b(do not delete|don't delete|do not close|don't close|do not erase|don't erase|not asking for deletion|not requesting deletion|not a deletion request|not a request to erase|not a request to delete|keep my account|keep the account|leave the account active|leave my profile|cancel my deletion request|no deletion requested|without removing any|without deleting any|marketing lists only|marketing emails only|marketing opt.?out only|promotional emails only|remove me from marketing lists|i still need the account)\b/i.test(s);
     const request=/\b(delet\w*|eras\w*|remov\w*|clos\w*|cancell\w*|forget\s+me|account\s+closure|permanent\w*\s+remov\w*|desaparecer|suppres\w*|supprim\w*|effac\w*|elimin\w*|borrar|apagar|excluir|exclusão|löschen|lösch\w*|rimuov\w*)\b|удал|削除|消去|删除|삭제|حذف|हटाना|मिटा/i.test(s);
-    return (request||/profile\s+(?:is\s+)?gone|records?\s+cannot\s+identify\s+me/i.test(s))&&!negate;
+    const positive=request||/profile\s+(?:is\s+)?gone|records?\s+cannot\s+identify\s+me/i.test(s);
+    if(negate)return "NOT_DELETE";
+    if(positive)return "DELETE";
+    // Ordinary non-deletion service inquiries are not deletion authorizations.
+    if(/\b(invoice|receipt|access|login|sign.?in|password|correct|change|replace|information|copy of|download|update my|order history)\b/i.test(s))
+      return "NOT_DELETE";
+    return "UNCERTAIN";
   };
   function planCase(c){
-    if(!intent(c.request_text))return {case_id:c.case_id,deletion_status:"NOT_APPLICABLE",steps_json:"[]"};
-    const id=emailToUser.get(norm(c.email));const aliasSet=id?aliases.get(id):new Set([norm(c.email)]);
+    const requestIntent=intent(c.request_text);
+    if(requestIntent==="NOT_DELETE")return {case_id:c.case_id,deletion_status:"NOT_APPLICABLE",steps_json:"[]"};
+    if(requestIntent==="UNCERTAIN")throw Error("Uncertain deletion intent in "+c.case_id+"; independent model or manual review required");
+    let id=emailToUser.get(norm(c.email));
+    // Bounded evidence fallback: a current/historical miss may be linked by an explicit
+    // customer email and user_id on the same observed resource, never by fuzzy names.
+    if(!id && !emailToUsers.has(norm(c.email))){
+      const candidates=new Set();
+      for(const o of observation)if(o.ident.includes(norm(c.email)))
+        for(const t of o.ident)if(/^user_\d+$/.test(t)&&users.has(t))candidates.add(t);
+      if(candidates.size===1)id=[...candidates][0];
+    }
+    if(!id)throw Error("Identity unresolved or ambiguous for "+c.case_id+"; do not invent an audit verdict");
+    const aliasSet=aliases.get(id);
+    const historicalAnon=linkedAnonymizedObservations(c);
+    const linkedAnonIds=new Set(historicalAnon.map(o=>o.rid+"|"+o.evidence));
+    const certifiedAbsent=certifiedAccountAbsence(c,id,historicalAnon.length>0);
     const mine=observation.filter(o=>{
       if(o.time&&o.time>c.audit_at)return false;
        if(captureByEvidence.get(o.evidence)&&captureByEvidence.get(o.evidence)>c.audit_at)return false;
-      return (owners.get(o.rid)?.has(id))||o.ident.some(v=>aliasSet.has(v)||norm(c.email)===v);
+      const resourceOwners=owners.get(o.rid);
+      // Never attribute a record owned by two candidates to one user by default.
+      return (resourceOwners?.size===1&&resourceOwners.has(id))||
+        o.ident.some(v=>aliasSet.has(v)||norm(c.email)===v)||
+        linkedAnonIds.has(o.rid+"|"+o.evidence);
     });
+    // Certified negative SQL readbacks are first-class evidence, not absence
+    // inferred from a missing collector match.
+    mine.push(...certifiedAbsent);
+    // Reconstruct each physical copy independently before assessing the resource.
+    const byStore=new Map();
+    for(const o of mine){
+      const k=o.rid+"|"+o.store, before=byStore.get(k);
+      if(!before||o.time>before.time||(o.time===before.time&&o.evidence<before.evidence))byStore.set(k,o);
+    }
+    const policyAction=o=>o.category==="DATA_FLOW"?"FLOW":o.category==="BACKUP_ARCHIVE"?"BACKUP":
+      o.category==="ACCOUNT_TOMBSTONE"?"REDACT":catAction.get(o.category);
+    const violates=o=>{
+      const a=policyAction(o);
+      if(!a)return false;
+      if(a==="DELETE")return o.state!=="ABSENT";
+      if(a==="REDACT")return !["REDACTED","ABSENT"].includes(o.state);
+      if(a==="ANONYMIZE")return !["ANONYMIZED","ABSENT"].includes(o.state);
+      if(a==="RETAIN")return o.state!=="PRESENT";
+      if(a==="FLOW"||a==="BACKUP")return o.state==="ACTIVE";
+      return false;
+    };
+    // Any confirmed violating copy wins over a compliant copy of the same resource.
     const byRes=new Map();
-    for(const o of mine){const k=o.rid;const before=byRes.get(k);if(!before||o.time>before.time||(o.time===before.time&&o.evidence<before.evidence))byRes.set(k,o)}
+    for(const o of byStore.values()){
+      const before=byRes.get(o.rid);
+      if(!before || Number(violates(o))>Number(violates(before)) ||
+        (violates(o)===violates(before) && o.time>before.time))byRes.set(o.rid,o);
+    }
     const steps=[], defects=[];const uniq=new Set();
     const push=(phase,sys,rid,op,state,evidence)=>{const key=phase+"|"+rid+"|"+op;if(uniq.has(key))return;uniq.add(key);steps.push({step_no:0,phase,system_id:sys,resource_id:rid,operation:op,state,evidence_id:evidence||""})};
     const todo=[];
     for(const o of byRes.values()){
       const kind=o.category;let action;
-      if(kind==="DATA_FLOW")action="FLOW";else if(kind==="BACKUP_ARCHIVE")action="BACKUP";else if(kind==="ACCOUNT_TOMBSTONE")action="REDACT";else action=catAction.get(kind)||"DELETE";
+      if(kind==="DATA_FLOW")action="FLOW";else if(kind==="BACKUP_ARCHIVE")action="BACKUP";else if(kind==="ACCOUNT_TOMBSTONE")action="REDACT";else action=catAction.get(kind);
+      // Unknown categories are not implicitly DELETE; preserve the uncertainty.
+      if(!action)throw Error("No deletion policy for "+kind+" on "+o.rid);
       if(kind==="LEGAL_HOLD_RECORD"&&String(o.rec.hold_status||"").toUpperCase()==="RELEASED")action="DELETE";
       if(kind==="SECURITY_AUDIT_LOG"&&o.rec.retention_until&&o.rec.retention_until<c.audit_at)action="DELETE";
       const spec=actionState[action];if(!spec)continue;
@@ -258,7 +425,8 @@ async function runtimeAudit(load) {
       if(action==="BACKUP"&&o.state==="BLOCKED")verify="VERIFY_RESTORE_BLOCKED";
       push("VERIFICATION",o.sys,o.rid,verify,vstate,o.evidence);
     }
-    const incomplete=defects.length>0||!byRes.size;
+    const incomplete=defects.length>0||!byRes.size||
+      [...byRes.values()].some(o=>violates(o)&&policyAction(o)==="RETAIN");
     if(incomplete){
       for(const t of todo)push("REMEDIATION",t.sys,t.rid,t.spec[1],t.spec[4],"");
       for(const s of steps)if(s.phase==="VERIFICATION")s.evidence_id="";
@@ -271,7 +439,7 @@ async function runtimeAudit(load) {
   const sampleOut=sample.map(planCase);
   const esc=x=>'"'+String(x).replace(/"/g,'""')+'"';
   const csv="case_id,deletion_status,steps_json\n"+out.map(r=>[r.case_id,r.deletion_status,esc(r.steps_json)].join(",")).join("\n")+"\n";
-  return {csv,stats:{requests:out.length,sources:sourceCount,skipped,observations:observation.length,known_resource_owners:owners.size,statuses:out.reduce((a,r)=>(a[r.deletion_status]=(a[r.deletion_status]||0)+1,a),{}),sample:{total:sampleOut.length}},samplePred:sampleOut};
+  return {csv,stats:{requests:out.length,sources:sourceCount,skipped,observations:observation.length,known_resource_owners:owners.size,ambiguous_email_aliases:ambiguousEmails.length,physical_stores:[...new Set(observation.map(o=>o.store))].length,statuses:out.reduce((a,r)=>(a[r.deletion_status]=(a[r.deletion_status]||0)+1,a),{}),sample:{total:sampleOut.length}},samplePred:sampleOut};
 }
 async function main() {
   const root = path.resolve(__dirname, "..");

@@ -152,11 +152,15 @@ truth for any hidden customer.
 
 ## Improvements implemented and limitations
 
-- Added historical identifier matching, point-in-time filtering, multiple
-  evidence formats (SQL, JSON, logs, text), and explicit policy/operation order.
-- Added direct observation precedence rather than trusting a workflow's
-  reported success.
-- Added case/field/step and sequence scoring, plus independent contract tests.
+- Added historical identifier matching, point-in-time filtering, and
+  SQL/JSON/log/PDF/image evidence normalization, with explicit operation order.
+- Added per-physical-replica state reconstruction and scoped, independently
+  corroborated negative SQL readbacks; source timestamps remain mandatory.
+- Added historical provenance verification for anonymized records and trace
+  joins for RFC5424 and pipe-delimited structured service logs.
+- Added direct readback precedence over operation SUCCESS/PARTIAL claims.
+- Added case/field/step and sequence scoring, independent regression fixtures,
+  strict audit-cutoff checks, and reproducible submission packaging.
 - Remaining limitations: screenshots and PDFs are only approximately interpreted\n  using OCR/text extraction and can generate false associations; some
   anonymized records cannot be linked once historical identifiers disappear;
   overlapping snapshots can give conflicting observations; intent detection
