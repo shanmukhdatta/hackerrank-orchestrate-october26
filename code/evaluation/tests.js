@@ -48,5 +48,62 @@ async function scenario(label,email,requestText,records,expectedStatus,expectedO
   tests.push(await scenario("Compliant redacted tombstone","user1@example.org","Please delete my account.",[{resource_id:"tombstone_100",record_type:"ACCOUNT_TOMBSTONE",account_status:"DELETED",subject_reference:"user_1",email:null,name:null,phone:null,email_hash:null,recorded_at:"2026-09-02T09:00:00Z"}],"COMPLETE",["VERIFY_RECORD_REDACTED"]));
   tests.push(await scenario("Deleted tombstone still exposing email","user1@example.org","Please delete my account.",[{resource_id:"tombstone_100",record_type:"ACCOUNT_TOMBSTONE",account_status:"DELETED",subject_reference:"user_1",email:"user1@example.org",recorded_at:"2026-09-02T09:00:00Z"}],"INCOMPLETE",["REPORT_EXPOSED_PII","REDACT_RECORD","VERIFY_RECORD_REDACTED"]));
   tests.push(await scenario("Future-captured evidence unavailable at audit","user1@example.org","Please delete my account.",[{resource_id:"account_100",record_type:"USER_PROFILE",result:"NOT_FOUND",subject_reference:"user_1",recorded_at:"2026-09-02T09:00:00Z"}],"INCOMPLETE",[],null,"2026-09-03T09:00:00Z"));
+
+  // Real-data regression class: historical email must resolve to the current user_id.
+  {
+    const email="old@example.org", user="user_1";
+    const fixtures={
+      "dataset/deletion_requests.csv":HEAD+"case_999,"+email+",2026-09-01T10:00:00Z,COMPLETE,2026-09-01T11:00:00Z,2026-09-02T10:00:00Z,Please delete my account.\\n",
+      "dataset/sample_deletion_requests.csv":HEAD,
+      "dataset/sample_output.csv":"case_id,deletion_status,steps_json\\n",
+      "dataset/user_identities.csv":IDS_HEAD+"user_1,Example User,new@example.org,,,2026-08-01T00:00:00Z\\n",
+      "dataset/user_audit_log.csv":"audit_id,user_id,event_time,field_name,old_value,new_value\\naudit_1,user_1,2026-08-01T00:00:00Z,email,old@example.org,new@example.org\\n",
+      "dataset/system_activity.csv":"activity_id,event_time,event_type,source_system,target_system,resource_id,reported_result,details\\n",
+      "dataset/deletion_rules.csv":RULES,
+      "dataset/evidence_files.csv":EVIDENCE_HEADER+"evidence_01,evidence/records/test.json,test,2026-09-02T09:00:00Z\\n",
+      "dataset/evidence/records/test.json":JSON.stringify({records:[{resource_id:"account_100",record_type:"USER_PROFILE",result:"NOT_FOUND",subject_reference:user,recorded_at:"2026-09-02T09:00:00Z"}]})
+    };
+    const result=await runtimeAudit(async p=>fixtures[p]);
+    assert.ok(result.csv.includes("case_999,COMPLETE"),"historical email resolves to a verified user");
+    tests.push({label:"Historical email identity graph",status:"PASS"});
+  }
+  // Replica-only personal data must not disappear behind an absent primary readback.
+  {
+    const defs="CREATE TABLE customer_data_primary (resource_id TEXT, origin_system TEXT, collection_name TEXT, record_json TEXT, updated_at TEXT);"+
+      "CREATE TABLE customer_data_read_replica (resource_id TEXT, origin_system TEXT, collection_name TEXT, record_json TEXT, updated_at TEXT);";
+    const sqlRow=(table,result)=>"INSERT INTO "+table+" VALUES('account_100','account_service','customer_profiles','"+
+      JSON.stringify({resource_id:"account_100",record_type:"USER_PROFILE",result,subject_reference:"user_1"})+
+      "','2026-09-02T09:00:00Z');";
+    const fixtures={
+      "dataset/deletion_requests.csv":HEAD+"case_999,user1@example.org,2026-09-01T10:00:00Z,COMPLETE,2026-09-01T11:00:00Z,2026-09-02T10:00:00Z,Please delete my account.\\n",
+      "dataset/sample_deletion_requests.csv":HEAD,
+      "dataset/sample_output.csv":"case_id,deletion_status,steps_json\\n",
+      "dataset/user_identities.csv":IDS_HEAD+"user_1,Example User,user1@example.org,,,2026-08-01T00:00:00Z\\n",
+      "dataset/user_audit_log.csv":"audit_id,user_id,event_time,field_name,old_value,new_value\\n",
+      "dataset/system_activity.csv":"activity_id,event_time,event_type,source_system,target_system,resource_id,reported_result,details\\n",
+      "dataset/deletion_rules.csv":RULES,
+      "dataset/evidence_files.csv":EVIDENCE_HEADER+"evidence_01,evidence/databases/test.sql,test,2026-09-02T09:00:00Z\\n",
+      "dataset/evidence/databases/test.sql":defs+sqlRow("customer_data_primary","NOT_FOUND")+sqlRow("customer_data_read_replica","FOUND")
+    };
+    const result=await runtimeAudit(async p=>fixtures[p]);
+    assert.ok(result.csv.includes("case_999,INCOMPLETE"),"present read-replica copy must override absent primary");
+    assert.ok(result.csv.includes("REPORT_REMAINING_RECORD"),"replica produces grounded finding");
+    tests.push({label:"Replica-only ghost record",status:"PASS"});
+  }
+  // A shared email must never be silently assigned to the last user in the map.
+  {
+    const fixtures={
+      "dataset/deletion_requests.csv":HEAD+"case_999,shared@example.org,2026-09-01T10:00:00Z,COMPLETE,2026-09-01T11:00:00Z,2026-09-02T10:00:00Z,Please delete my account.\\n",
+      "dataset/sample_deletion_requests.csv":HEAD,
+      "dataset/sample_output.csv":"case_id,deletion_status,steps_json\\n",
+      "dataset/user_identities.csv":IDS_HEAD+"user_1,A,shared@example.org,,,2026-08-01T00:00:00Z\\nuser_2,B,shared@example.org,,,2026-08-01T00:00:00Z\\n",
+      "dataset/user_audit_log.csv":"audit_id,user_id,event_time,field_name,old_value,new_value\\n",
+      "dataset/system_activity.csv":"activity_id,event_time,event_type,source_system,target_system,resource_id,reported_result,details\\n",
+      "dataset/deletion_rules.csv":RULES,
+      "dataset/evidence_files.csv":EVIDENCE_HEADER
+    };
+    await assert.rejects(()=>runtimeAudit(async p=>fixtures[p]),/Identity unresolved or ambiguous/);
+    tests.push({label:"Ambiguous identity rejected",status:"PASS"});
+  }
   console.log(JSON.stringify({pass:tests.length,tests},null,2));
 })().catch(e=>{console.error(e);process.exitCode=1});
