@@ -199,7 +199,7 @@ Before submitting, confirm that:
 
 The latest measured 32-case public sample evaluation reports **29/32 (90.62%) status
 accuracy**, **7/32 (21.88%) exact-row accuracy**, and **89.64% full step F1**.
-The full dataset produces 518 structurally valid rows. These are public
+The prediction engine does **not read sample_output.csv**; only the separate evaluator does. The full dataset produces 518 structurally valid rows. These are public
 sample metrics only, not hidden-grader accuracy. There are **27 INCOMPLETE
 cases with no evidence-grounded steps**, so this should not be represented
 as a fully correct solution.
