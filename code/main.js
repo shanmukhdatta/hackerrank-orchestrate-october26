@@ -16,6 +16,7 @@ async function runtimeAudit(load) {
   const manifest=dictCSV(await load("dataset/evidence_files.csv"));
   const rules=dictCSV(await load("dataset/deletion_rules.csv"));
   const catAction=new Map(rules.map(r=>[r.data_category,r.required_action]));
+   const captureByEvidence=new Map(manifest.map(f=>[f.file_id,f.captured_at]));
   const norm=s=>String(s??"").trim().toLowerCase();
   const tokens=s=>[...new Set((String(s??"").toLowerCase().match(/[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}|user_\d+|[a-f0-9]{64}/g)||[]))];
   const aliases=new Map(); const users=new Map();
@@ -63,7 +64,8 @@ async function runtimeAudit(load) {
     if(kind==="BACKUP_ARCHIVE")return r.restore_allowed!==undefined?(tri(r.restore_allowed)?"ACTIVE":"BLOCKED"):raw==="ACTIVE"?"ACTIVE":raw==="BLOCKED"?"BLOCKED":"";
     if(r.status_code!==undefined)return Number(r.status_code)===404?"ABSENT":Number(r.status_code)===200?"PRESENT":"";
     if(r.rows!==undefined&&(/profile_lookup_completed|audit_record_read_completed|.*_read_completed/.test(String(r.event||""))))return String(r.rows)==="0"?"ABSENT":"PRESENT";
-    if(kind==="USER_PROFILE"&&raw==="DELETED"&&["email","phone","full_name","name","email_hash"].some(k=>r[k]!=null&&r[k]!==""))return "PRESENT";
+    if(kind==="ACCOUNT_TOMBSTONE"&&raw==="DELETED")return ["name","email","phone","email_hash","full_name"].some(k=>r[k]!=null&&r[k]!=="")?"PRESENT":"REDACTED";
+     if(kind==="USER_PROFILE"&&raw==="DELETED"&&["email","phone","full_name","name","email_hash"].some(k=>r[k]!=null&&r[k]!==""))return "PRESENT";
      if(["NOT_FOUND","MISSING","ABSENT","DELETED","404","NO_MATCH"].includes(raw))return "ABSENT";
     if(["FOUND","PRESENT","EXISTS","HIT","ACTIVE","IDENTIFIABLE","UNREDACTED","200","SUCCESS"].includes(raw))return "PRESENT";
     if(["REDACTED","ANONYMIZED","DISABLED","BLOCKED"].includes(raw))return raw;
@@ -231,6 +233,7 @@ async function runtimeAudit(load) {
     const id=emailToUser.get(norm(c.email));const aliasSet=id?aliases.get(id):new Set([norm(c.email)]);
     const mine=observation.filter(o=>{
       if(o.time&&o.time>c.audit_at)return false;
+       if(captureByEvidence.get(o.evidence)&&captureByEvidence.get(o.evidence)>c.audit_at)return false;
       return (owners.get(o.rid)?.has(id))||o.ident.some(v=>aliasSet.has(v)||norm(c.email)===v);
     });
     const byRes=new Map();
