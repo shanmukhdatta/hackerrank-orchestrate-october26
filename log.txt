@@ -124,3 +124,26 @@ branch=main
 repo_root=/mnt/data/ghost_check
 worktree=GitHub connector and local independent verification copy
 parent_agent=none
+
+## [2026-10-25T06:02:42.362Z] Continue final verification and packaging
+
+User Prompt (verbatim, secrets redacted):
+conitune
+
+Agent Response Summary:
+Continued the final submission checks after implementing evidence-cutoff, policy and intent fixes. Downloaded and independently checked a successful GitHub Actions build: all 13 synthetic regression scenarios passed, output.csv contained 518 unique ordered requests and valid JSON, and the public sample evaluation was 29/32 status accuracy, 7/32 exact row accuracy and 89.64% step F1. Removed the public sample answer file from the inference code so only the separate evaluator reads answer keys. Prepared individual submission artifacts and a convenience ZIP, while marking unresolved cases and the absence of genuine historical raw agent trace exports.
+
+Actions:
+* Inspected latest GitHub Actions jobs, logs and downloadable submission artifact.
+* Validated archive contents and 518-row output independently using Python.
+* Updated code/main.js to keep sample_output.csv out of runtime inference.
+* Documented exact submission handling and outstanding quality gaps in README.md.
+* No HackerRank submission was performed; no missing raw session trace was fabricated.
+
+Context:
+tool=ChatGPT
+model=GPT-6
+branch=main
+repo_root=/mnt/data/ghost_check
+worktree=GitHub connector and independent local verifier
+parent_agent=none
