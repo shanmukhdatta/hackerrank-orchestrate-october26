@@ -42,7 +42,7 @@ const read=async f=>{const result=await runtimeAudit(async p=>{if(!(p in f))thro
 const row=(csv,id)=>{
   const line=csv.split("\n").find(s=>s.startsWith(id+","));
   if(!line)throw Error("missing output "+id);
-  const [,status,raw]=/^([^,]+),([^,]+),"(.*)"$/.exec(line);
+  const [,caseId,status,raw]=/^([^,]+),([^,]+),"(.*)"$/.exec(line);
   return {status,steps:JSON.parse(raw.replace(/""/g,'"'))};
 };
 (async()=>{
