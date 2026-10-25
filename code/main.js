@@ -249,10 +249,18 @@ async function runtimeAudit(load) {
     s=norm(s).normalize("NFKC");
     const negate=/\b(do not delete|don't delete|do not close|don't close|do not erase|don't erase|not asking for deletion|not requesting deletion|not a deletion request|not a request to erase|not a request to delete|keep my account|keep the account|leave the account active|leave my profile|cancel my deletion request|no deletion requested|without removing any|without deleting any|marketing lists only|marketing emails only|marketing opt.?out only|promotional emails only|remove me from marketing lists|i still need the account)\b/i.test(s);
     const request=/\b(delet\w*|eras\w*|remov\w*|clos\w*|cancell\w*|forget\s+me|account\s+closure|permanent\w*\s+remov\w*|desaparecer|suppres\w*|supprim\w*|effac\w*|elimin\w*|borrar|apagar|excluir|exclusão|löschen|lösch\w*|rimuov\w*)\b|удал|削除|消去|删除|삭제|حذف|हटाना|मिटा/i.test(s);
-    return (request||/profile\s+(?:is\s+)?gone|records?\s+cannot\s+identify\s+me/i.test(s))&&!negate;
+    const positive=request||/profile\s+(?:is\s+)?gone|records?\s+cannot\s+identify\s+me/i.test(s);
+    if(negate)return "NOT_DELETE";
+    if(positive)return "DELETE";
+    // Ordinary non-deletion service inquiries are not deletion authorizations.
+    if(/\b(invoice|receipt|access|login|sign.?in|password|correct|information|copy of|download|update my|order history)\b/i.test(s))
+      return "NOT_DELETE";
+    return "UNCERTAIN";
   };
   function planCase(c){
-    if(!intent(c.request_text))return {case_id:c.case_id,deletion_status:"NOT_APPLICABLE",steps_json:"[]"};
+    const requestIntent=intent(c.request_text);
+    if(requestIntent==="NOT_DELETE")return {case_id:c.case_id,deletion_status:"NOT_APPLICABLE",steps_json:"[]"};
+    if(requestIntent==="UNCERTAIN")throw Error("Uncertain deletion intent in "+c.case_id+"; independent model or manual review required");
     let id=emailToUser.get(norm(c.email));
     // Bounded evidence fallback: a current/historical miss may be linked by an explicit
     // customer email and user_id on the same observed resource, never by fuzzy names.
