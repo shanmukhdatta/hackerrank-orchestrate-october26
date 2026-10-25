@@ -8,20 +8,20 @@ not prediction input. No hidden labels were used.
 
 | Metric | Numerator / denominator | Score |
 |---|---:|---:|
-| Case-level deletion-status accuracy | 27/32 | 84.38% |
+| Case-level deletion-status accuracy | 28/32 | 87.50% |
 | Exact complete-row accuracy | 7/32 | 21.88% |
 | Ordered operation-sequence accuracy | 8/32 | 25.00% |
-| Positional field-level accuracy | 707/1182 | 59.81% |
-| Full step precision | 128/160 | 80.00% |
-| Full step recall | 128/193 | 66.32% |
-| Full step F1 | - | 72.52% |
+| Positional field-level accuracy | 720/1182 | 60.91% |
+| Full step precision | 131/162 | 80.86% |
+| Full step recall | 131/193 | 67.88% |
+| Full step F1 | - | 73.80% |
 
 Full run: **518 cases**; parsed 94 machine-readable
 evidence files; 2745 observations; matched ownership for
 1674 resources.
-Predicted status counts: {"COMPLETE": 156, "INCOMPLETE": 357, "NOT_APPLICABLE": 5}.
+Predicted status counts: {"COMPLETE": 159, "INCOMPLETE": 349, "NOT_APPLICABLE": 10}.
 Full-output contract validation issues: **0**.
-Cases with incomplete assessment but no grounded action steps: **32** (blocking quality gap; needs independent evidence, not fabricated).
+Cases with incomplete assessment but no grounded action steps: **27** (blocking quality gap; needs independent evidence, not fabricated).
 
 ## Independent constructed evaluation cases
 
@@ -43,7 +43,7 @@ truth for any hidden customer.
 - case_07: expected INCOMPLETE (4 steps); predicted INCOMPLETE (3 steps)
 - case_08: expected INCOMPLETE (4 steps); predicted INCOMPLETE (3 steps)
 - case_09: expected INCOMPLETE (5 steps); predicted INCOMPLETE (3 steps)
-- case_10: expected INCOMPLETE (4 steps); predicted COMPLETE (1 steps)
+- case_10: expected INCOMPLETE (4 steps); predicted INCOMPLETE (3 steps)
 - case_15: expected INCOMPLETE (5 steps); predicted INCOMPLETE (8 steps)
 - case_17: expected INCOMPLETE (5 steps); predicted INCOMPLETE (6 steps)
 - case_18: expected INCOMPLETE (14 steps); predicted INCOMPLETE (12 steps)
