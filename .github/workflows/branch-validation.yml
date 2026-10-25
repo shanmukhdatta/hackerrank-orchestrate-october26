@@ -23,6 +23,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq poppler-utils tesseract-ocr
           python3 code/extract_media.py
+      - name: Confirm observed dataset edge cases
+        run: python3 code/evaluation/dataset_edge_tests.py
       - name: Run agent regression tests
         run: node code/evaluation/tests.js
       - name: Generate 518-case audit
